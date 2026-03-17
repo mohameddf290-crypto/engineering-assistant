@@ -1,0 +1,1 @@
+"""Engineering Assistant — core package."""
