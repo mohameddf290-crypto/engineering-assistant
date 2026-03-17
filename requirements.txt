@@ -1,0 +1,9 @@
+essentia
+numpy
+scipy
+librosa
+fastapi
+uvicorn
+pydantic
+pytest
+torch
