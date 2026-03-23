@@ -103,8 +103,8 @@ class InfinityEngine:
         similar = self.generate_similar(source_progression, taste_profile)
         different = self.generate_different(source_progression, taste_profile)
         n = len(source_progression.voicings)
-        n_similar = int(round(n * similarity_score))
-        mixed_voicings = similar.voicings[:n_similar] + different.voicings[n_similar:]
+        n_similar = max(0, min(n, int(round(n * similarity_score))))
+        mixed_voicings = similar.voicings[:n_similar] + different.voicings[n_similar:n]
         return ChordProgression(
             voicings=mixed_voicings,
             key=source_progression.key if similarity_score > 0.5 else different.key,

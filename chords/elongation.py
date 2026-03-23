@@ -42,9 +42,16 @@ class ElongationSystem:
     ) -> ChordProgression:
         arc = self.analyse_harmonic_arc(source_progression)
         extension = self.generate_continuation(source_progression, arc, additional_bars)
-        combined_voicings = list(source_progression.voicings) + list(extension.voicings)
-        for v in combined_voicings[len(source_progression.voicings):]:
-            v.position_bar += source_progression.length_bars
+        ext_voicings = [
+            ChordVoicing(
+                root=v.root, quality=v.quality, extensions=v.extensions,
+                bass_note=v.bass_note, midi_notes=list(v.midi_notes),
+                duration_beats=v.duration_beats,
+                position_bar=v.position_bar + source_progression.length_bars,
+            )
+            for v in extension.voicings
+        ]
+        combined_voicings = list(source_progression.voicings) + ext_voicings
         return ChordProgression(
             voicings=combined_voicings,
             key=source_progression.key,

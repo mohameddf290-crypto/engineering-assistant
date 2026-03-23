@@ -41,7 +41,8 @@ class ChordMixer:
         n_a = len(a_adj.voicings)
         n_b = len(b_adj.voicings)
         total = n_a + n_b
-        n_from_a = max(1, round(total * (1 - blend_ratio)))
+        # blend_ratio is the fraction of the mix drawn from progression_a
+        n_from_a = max(1, round(total * blend_ratio))
         n_from_b = total - n_from_a
         a_voicings = list(a_adj.voicings)[:n_from_a]
         b_voicings = list(b_adj.voicings)[:n_from_b]
