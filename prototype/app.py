@@ -461,7 +461,7 @@ def _weighted_choice(weights: Dict[Any, float]) -> Any:
 
 
 def get_scale_notes(key: str, scale: str) -> List[int]:
-    """Return MIDI notes for one octave of the given key/scale, starting at C4."""
+    """Return MIDI notes for one octave of the given key/scale (root in octave 4)."""
     root = NOTE_TO_MIDI_BASE.get(key, 60)
     intervals = SCALES.get(scale, SCALES["major"])
     return [root + i for i in intervals]
@@ -528,20 +528,25 @@ def _closest_index(lst: List[int], val: int) -> int:
 # ============================================================
 
 def _voice_cost(prev_voices: List[int], new_voices: List[int]) -> float:
-    """Cost = total semitone movement (greedy closest-voice assignment)."""
+    """Cost = total semitone movement (greedy closest-voice assignment, no voice reuse)."""
     cost = 0.0
     used = [False] * len(new_voices)
     for pv in prev_voices:
         best_dist = 999
-        best_j = 0
+        best_j = -1
         for j, nv in enumerate(new_voices):
+            if used[j]:
+                continue
             d = abs(nv - pv)
             if d < best_dist:
                 best_dist = d
                 best_j = j
-        cost += best_dist
-        if not used[best_j]:
+        if best_j >= 0:
+            cost += best_dist
             used[best_j] = True
+        else:
+            # All new voices already matched; add distance to closest (penalize extra voices)
+            cost += min(abs(nv - pv) for nv in new_voices)
     return cost
 
 
@@ -618,14 +623,17 @@ def voice_lead_chord(
         common = len(prev_set & cand_set)
         cost -= common * 0.5
 
-        # Penalty: 7th not resolving down
-        prev_7th = (next_root_midi - 2) % 12  # major 7th of prev chord
+        # Bonus: voices moving by step rather than leap
+        movements = []
+        used_cand = [False] * len(cand)
         for pv in prev_voicing:
-            if pv % 12 == prev_7th:
-                # Expect it to go down by step
-                resolved = any(abs(nv - pv) <= 2 and nv < pv for nv in cand)
-                if not resolved:
-                    cost += 1.0
+            available = [(abs(cv - pv), i) for i, cv in enumerate(cand) if not used_cand[i]]
+            if available:
+                best_mv = min(available)
+                movements.append(best_mv[0])
+                used_cand[best_mv[1]] = True
+        stepwise = sum(1 for m in movements if m <= 2)
+        cost -= stepwise * 0.3
 
         if cost < best_cost:
             best_cost = cost
@@ -1172,8 +1180,9 @@ def mix_progressions(
     # Detect key from chord names heuristically (use first chord root)
     key_a = prog_a[0].get("root", "C") if prog_a else "C"
     key_b = prog_b[0].get("root", "C") if prog_b else "C"
-    scale_a = prog_a[0].get("quality", "major")
-    scale_b = prog_b[0].get("quality", "major")
+    # "quality" is chord quality, not scale; use "major" for compatibility check
+    scale_a = "major"
+    scale_b = "major"
 
     # Use "major" as default scale for compatibility check
     shared = _count_shared_scale_tones(key_a, "major", key_b, "major")
@@ -1351,9 +1360,10 @@ def _develop_motif(
         return [n + transpose for n in motif]
 
     elif technique == "sequence":
-        # Same intervals, transposed
+        # Same intervals, transposed; use a non-zero offset to ensure movement
+        seq_offset = transpose if transpose != 0 else random.choice([-5, -3, 2, 3, 5, 7])
         intervals = [motif[i + 1] - motif[i] for i in range(len(motif) - 1)]
-        start_idx = _closest_index(scale_notes, motif[0] + (transpose or random.choice([-5, -3, 2, 3, 5, 7])))
+        start_idx = _closest_index(scale_notes, motif[0] + seq_offset)
         start = scale_notes[start_idx]
         result = [start]
         for step in intervals:
