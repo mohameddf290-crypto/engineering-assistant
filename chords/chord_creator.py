@@ -58,6 +58,25 @@ _DEGREE_QUALITIES = {
     "melodic_minor": {1:"min", 2:"min", 3:"aug", 4:"maj", 5:"maj", 6:"dim", 7:"dim"},
 }
 
+# Chord quality triadic type for palette compatibility
+_QUALITY_TRIADIC_TYPE = {
+    "maj": "maj", "maj7": "maj", "maj9": "maj", "add9": "maj", "6": "maj",
+    "maj11": "maj", "dom7": "maj", "dom9": "maj", "13": "maj", "aug": "maj",
+    "sus2": "any", "sus4": "any",  # sus chords are compatible with any context
+    "min": "min", "m7": "min", "m9": "min", "madd9": "min", "m6": "min",
+    "m11": "min", "m7b5": "min", "dim": "min", "dim7": "min",
+}
+
+
+def _clamp_to_range(note: int, lo: int, hi: int) -> int:
+    """Clamp a MIDI note number into [lo, hi] by shifting octaves, then hard-clamping."""
+    span = hi - lo + 1
+    while note < lo:
+        note += 12
+    while note > hi:
+        note -= 12
+    return max(lo, min(hi, note))
+
 
 @dataclass
 class ChordVoicing:
@@ -167,9 +186,7 @@ class ChordCreationBrain:
 
         all_intervals = sorted(set(intervals + ext_intervals))
 
-        upper_notes = [root + iv for iv in all_intervals]
-        upper_notes = [n % 12 + 60 if n > 83 else (n + 12 if n < 60 else n) for n in upper_notes]
-        upper_notes = [max(60, min(83, n)) for n in upper_notes]
+        upper_notes = [_clamp_to_range(root + iv, 60, 83) for iv in all_intervals]
 
         prev_notes = context.get("prev_notes", [])
         if prev_notes:
@@ -221,14 +238,8 @@ class ChordCreationBrain:
         triadic_type = "min" if default_quality in ("min", "dim", "m7", "m7b5", "dim7") else "maj"
         compatible = []
         for q in palette:
-            q_intervals = CHORD_INTERVALS.get(q, [])
-            if not q_intervals:
-                continue
-            has_minor = 3 in q_intervals
-            has_major = 4 in q_intervals
-            if triadic_type == "min" and has_minor:
-                compatible.append(q)
-            elif triadic_type == "maj" and has_major:
+            q_type = _QUALITY_TRIADIC_TYPE.get(q)
+            if q_type == "any" or q_type == triadic_type:
                 compatible.append(q)
         if compatible:
             return random.choice(compatible)

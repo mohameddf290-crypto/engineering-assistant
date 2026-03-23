@@ -183,14 +183,19 @@ class ChordMixer:
         semitone_shift = key_a_idx - key_b_idx
         new_voicings = []
         for v in progression_b.voicings:
-            new_root = v.root + semitone_shift
-            while new_root < 60:
-                new_root += 12
-            while new_root > 71:
-                new_root -= 12
-            new_bass = max(36, min(47, new_root - 24))
-            new_midi = [n + semitone_shift for n in v.midi_notes]
-            new_midi = [max(36, min(83, n)) for n in new_midi]
+            # Use modulo arithmetic for clean octave-invariant transposition
+            root_pc = (v.root % 12 + semitone_shift) % 12
+            new_root = 60 + root_pc  # place in octave 4
+            new_bass = 36 + root_pc  # place in octave 2
+            # Shift all upper voices by semitone_shift, clamped to valid range
+            new_midi = []
+            for n in v.midi_notes:
+                shifted = n + semitone_shift
+                if shifted < 36:
+                    shifted += 12 * ((36 - shifted) // 12 + 1)
+                elif shifted > 83:
+                    shifted -= 12 * ((shifted - 83) // 12 + 1)
+                new_midi.append(max(36, min(83, shifted)))
             new_voicings.append(ChordVoicing(
                 root=new_root,
                 quality=v.quality,

@@ -52,7 +52,8 @@ class ChordTranslationSystem:
         n_chords = len(analysis_result.detected_chords) or 8
         blueprint = analysis_result.chord_durations[:n_chords] if analysis_result.chord_durations else [2.0] * n_chords
         length_bars = max(4, int(sum(blueprint) / 4)) if blueprint else 8
-        deg_weights = dict(self._DEGREE_WEIGHTS_MINOR if "minor" in scale else self._DEGREE_WEIGHTS_MAJOR)
+        _minor_scales = {"minor", "harmonic_minor", "melodic_minor", "phrygian", "dorian"}
+        deg_weights = dict(self._DEGREE_WEIGHTS_MINOR if scale in _minor_scales else self._DEGREE_WEIGHTS_MAJOR)
         voice_leading_rules = ["smooth_voice_leading", "avoid_parallel_fifths"]
         return ChordCreationPlan(
             key=key,

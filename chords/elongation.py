@@ -117,7 +117,9 @@ class ElongationSystem:
         new_voicings = []
         for i in range(n_new):
             deg = degree_seq[i % len(degree_seq)]
-            pc = scale_pcs[(deg - 1) % len(scale_pcs)]
+            # Ensure degree is valid (1-indexed, within scale bounds)
+            deg_idx = max(0, (deg - 1) % len(scale_pcs))
+            pc = scale_pcs[deg_idx]
             root_midi = 60 + pc
             quality = quality_vocab[i % len(quality_vocab)]
             duration = rhythm_pattern[i % len(rhythm_pattern)]
