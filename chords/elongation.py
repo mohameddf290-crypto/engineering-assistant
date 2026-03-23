@@ -26,8 +26,10 @@ class ElongationRequest:
 class ElongationResult:
     original_progression: Optional[ChordProgression] = None
     extended_progression: Optional[ChordProgression] = None
+    extension_bars_only: Optional[ChordProgression] = None
     added_bars: int = 0
-    continuity_score: float = 0.0
+    harmonic_continuity_score: float = 0.0
+    continuity_score: float = 0.0  # alias kept for backward compat
     style_used: str = ""
 
 
@@ -39,7 +41,7 @@ class ElongationSystem:
         source_progression: ChordProgression,
         additional_bars: int,
         style: str = "develop",
-    ) -> ChordProgression:
+    ) -> ElongationResult:
         arc = self.analyse_harmonic_arc(source_progression)
         extension = self.generate_continuation(source_progression, arc, additional_bars)
         ext_voicings = [
@@ -52,13 +54,23 @@ class ElongationSystem:
             for v in extension.voicings
         ]
         combined_voicings = list(source_progression.voicings) + ext_voicings
-        return ChordProgression(
+        extended = ChordProgression(
             voicings=combined_voicings,
             key=source_progression.key,
             scale=source_progression.scale,
             length_bars=source_progression.length_bars + additional_bars,
             emotional_character=source_progression.emotional_character,
             creation_plan_ref=source_progression.creation_plan_ref,
+        )
+        continuity = self.validate_continuity(source_progression, extension)
+        return ElongationResult(
+            original_progression=source_progression,
+            extended_progression=extended,
+            extension_bars_only=extension,
+            added_bars=additional_bars,
+            harmonic_continuity_score=continuity,
+            continuity_score=continuity,
+            style_used=style,
         )
 
     def analyse_harmonic_arc(self, progression: ChordProgression) -> Dict:

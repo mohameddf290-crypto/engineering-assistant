@@ -36,24 +36,31 @@ class ChordMixer:
         progression_a: ChordProgression,
         progression_b: ChordProgression,
         blend_ratio: float = 0.5,
-    ) -> ChordProgression:
+    ) -> MixResult:
         a_adj, b_adj = self.resolve_key_conflict(progression_a, progression_b)
         n_a = len(a_adj.voicings)
         n_b = len(b_adj.voicings)
         total = n_a + n_b
-        # blend_ratio is the fraction of the mix drawn from progression_a
         n_from_a = max(1, round(total * blend_ratio))
         n_from_b = total - n_from_a
         a_voicings = list(a_adj.voicings)[:n_from_a]
         b_voicings = list(b_adj.voicings)[:n_from_b]
         mixed = a_voicings + b_voicings
         length = max(a_adj.length_bars, b_adj.length_bars)
-        return ChordProgression(
+        blended = ChordProgression(
             voicings=mixed,
             key=a_adj.key,
             scale=a_adj.scale,
             length_bars=length,
             emotional_character=f"{a_adj.emotional_character}+{b_adj.emotional_character}",
+        )
+        quality = self.evaluate_blend_quality(blended)
+        pivots = self.detect_pivot_chords(progression_a, progression_b)
+        return MixResult(
+            blended_progression=blended,
+            compatibility_score=quality,
+            strategy_used="weighted_blend",
+            notes=pivots[:3] if pivots else [],
         )
 
     def mix(
