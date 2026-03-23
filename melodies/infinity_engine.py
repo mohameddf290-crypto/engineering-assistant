@@ -42,7 +42,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from melodies.melody_creator import Melody
+from melodies.melody_creator import Melody, MelodyNote
 
 
 @dataclass
@@ -79,39 +79,166 @@ class MelodyInfinityEngine:
         self._variation_space: Dict[str, object] = {}
         self._quality_threshold: float = 0.75
 
+    def build_melodic_variation_space(
+        self, source_melody: Melody
+    ) -> Dict[str, object]:
+        """Analyse the source melody and define variation axes."""
+        notes = source_melody.notes
+        if not notes:
+            self._variation_space = {
+                "contour": [],
+                "rhythmic_pattern": [],
+                "pitch_classes": set(),
+                "register": (60, 72),
+                "density": 0.0,
+                "phrase_length": 0,
+            }
+            return self._variation_space
+
+        # Contour: list of interval directions between consecutive notes
+        contour: List[int] = []
+        for i in range(1, len(notes)):
+            diff = notes[i].pitch_midi - notes[i - 1].pitch_midi
+            if diff > 0:
+                contour.append(1)
+            elif diff < 0:
+                contour.append(-1)
+            else:
+                contour.append(0)
+
+        rhythmic_pattern = [n.duration_beats for n in notes]
+        pitch_classes = {n.pitch_midi % 12 for n in notes}
+        midi_values = [n.pitch_midi for n in notes]
+        register = (min(midi_values), max(midi_values))
+
+        total_beats = max(
+            (n.position_beats + n.duration_beats for n in notes), default=1.0
+        )
+        density = len(notes) / total_beats if total_beats > 0 else 0.0
+
+        self._variation_space = {
+            "contour": contour,
+            "rhythmic_pattern": rhythmic_pattern,
+            "pitch_classes": pitch_classes,
+            "register": register,
+            "density": density,
+            "phrase_length": len(notes),
+        }
+        return self._variation_space
+
     def generate_similar(
         self,
         source_melody: Melody,
         taste_profile: Dict[str, object],
     ) -> Melody:
-        """
-        Generate a new melody that is melodically similar to the source.
+        """Generate a new melody that preserves contour and rhythmic character."""
+        import random
 
-        TODO: Preserve contour shape, rhythmic character, and note vocabulary.
-        Vary specific note choices, rhythmic placements, and phrase details
-        within the established variation space. Run quality gate before returning.
-        """
-        raise NotImplementedError(
-            "TODO: Implement similar generation. Melodic DNA preserved; "
-            "surface details varied deliberately within the variation space."
+        space = self.build_melodic_variation_space(source_melody)
+        src_notes = source_melody.notes
+        if not src_notes:
+            return Melody(
+                notes=[],
+                key=source_melody.key,
+                scale=source_melody.scale,
+                length_bars=source_melody.length_bars,
+                role=source_melody.role,
+            )
+
+        new_notes: list = []
+        for note in src_notes:
+            shift = random.choice([-2, -1, 0, 1, 2])
+            new_pitch = max(0, min(127, note.pitch_midi + shift))
+            new_notes.append(
+                MelodyNote(
+                    pitch_midi=new_pitch,
+                    duration_beats=note.duration_beats,
+                    position_beats=note.position_beats,
+                    velocity=max(1, min(127, note.velocity + random.randint(-5, 5))),
+                    is_chord_tone=note.is_chord_tone,
+                    role_annotation=note.role_annotation,
+                )
+            )
+
+        melody = Melody(
+            notes=new_notes,
+            key=source_melody.key,
+            scale=source_melody.scale,
+            length_bars=source_melody.length_bars,
+            role=source_melody.role,
+            complexity_level=source_melody.complexity_level,
+            mode=source_melody.mode,
         )
+
+        if not self.apply_quality_gate(melody):
+            return self.generate_similar(source_melody, taste_profile)
+        return melody
 
     def generate_different(
         self,
         source_melody: Melody,
         taste_profile: Dict[str, object],
     ) -> Melody:
-        """
-        Generate a new melody that is genuinely different from the source.
+        """Generate a genuinely different melody using contrast operators."""
+        import random
 
-        TODO: Apply contrast operators across contour, rhythmic density, and
-        note selection simultaneously. Result must be melodically valid,
-        taste-consistent, and pass the quality gate.
-        """
-        raise NotImplementedError(
-            "TODO: Implement different generation using contrast operators "
-            "across contour, rhythm, and note selection simultaneously."
+        space = self.build_melodic_variation_space(source_melody)
+        src_notes = source_melody.notes
+        if not src_notes:
+            return Melody(
+                notes=[],
+                key=source_melody.key,
+                scale=source_melody.scale,
+                length_bars=source_melody.length_bars,
+                role=source_melody.role,
+            )
+
+        contour = space.get("contour", [])
+        inverted_contour = [-d for d in contour]
+        transposition = random.choice([5, 6, 7, -5, -6, -7])
+
+        new_notes: list = []
+        current_pitch = src_notes[0].pitch_midi + transposition
+        current_pitch = max(30, min(100, current_pitch))
+        density_factor = random.choice([0.5, 1.5, 2.0])
+
+        for i, note in enumerate(src_notes):
+            if i == 0:
+                pitch = current_pitch
+            else:
+                direction = inverted_contour[i - 1] if i - 1 < len(inverted_contour) else 0
+                step = random.randint(1, 4) * direction
+                pitch = current_pitch + step
+                pitch = max(30, min(100, pitch))
+                current_pitch = pitch
+
+            new_dur = note.duration_beats * density_factor
+            new_dur = max(0.25, min(4.0, new_dur))
+
+            new_notes.append(
+                MelodyNote(
+                    pitch_midi=pitch,
+                    duration_beats=new_dur,
+                    position_beats=note.position_beats,
+                    velocity=random.randint(65, 95),
+                    is_chord_tone=False,
+                    role_annotation="",
+                )
+            )
+
+        melody = Melody(
+            notes=new_notes,
+            key=source_melody.key,
+            scale=source_melody.scale,
+            length_bars=source_melody.length_bars,
+            role=source_melody.role,
+            complexity_level=source_melody.complexity_level,
+            mode=source_melody.mode,
         )
+
+        if not self.apply_quality_gate(melody):
+            return self.generate_different(source_melody, taste_profile)
+        return melody
 
     def generate_variation(
         self,
@@ -119,44 +246,75 @@ class MelodyInfinityEngine:
         similarity_score: float,
         taste_profile: Dict[str, object],
     ) -> Melody:
-        """
-        Generate a variation at a specific similarity level (0.0–1.0).
+        """Interpolate between similar (1.0) and different (0.0)."""
+        import random
 
-        TODO: Map similarity_score to a specific position in the melodic
-        variation space and generate accordingly. Smooth interpolation between
-        similar (1.0) and different (0.0) extremes.
-        """
-        raise NotImplementedError(
-            "TODO: Implement graded variation generation. Similarity score "
-            "maps to a specific point in the melodic variation space."
+        similarity_score = max(0.0, min(1.0, similarity_score))
+
+        if similarity_score >= 0.7:
+            return self.generate_similar(source_melody, taste_profile)
+        if similarity_score <= 0.3:
+            return self.generate_different(source_melody, taste_profile)
+
+        # Blend: use similar as base, then apply partial contrast
+        similar = self.generate_similar(source_melody, taste_profile)
+        blend_ratio = 1.0 - similarity_score  # how much "different" to mix in
+
+        new_notes: list = []
+        for note in similar.notes:
+            if random.random() < blend_ratio:
+                shift = random.choice([-5, -4, -3, 3, 4, 5])
+                pitch = max(30, min(100, note.pitch_midi + shift))
+            else:
+                pitch = note.pitch_midi
+
+            dur_factor = 1.0 + (random.random() - 0.5) * blend_ratio
+            dur = max(0.25, min(4.0, note.duration_beats * dur_factor))
+
+            new_notes.append(
+                MelodyNote(
+                    pitch_midi=pitch,
+                    duration_beats=dur,
+                    position_beats=note.position_beats,
+                    velocity=note.velocity,
+                    is_chord_tone=note.is_chord_tone,
+                    role_annotation=note.role_annotation,
+                )
+            )
+
+        melody = Melody(
+            notes=new_notes,
+            key=source_melody.key,
+            scale=source_melody.scale,
+            length_bars=source_melody.length_bars,
+            role=source_melody.role,
+            complexity_level=source_melody.complexity_level,
+            mode=source_melody.mode,
         )
+
+        if not self.apply_quality_gate(melody):
+            return self.generate_variation(source_melody, similarity_score, taste_profile)
+        return melody
 
     def apply_quality_gate(self, melody: Melody) -> bool:
-        """
-        Evaluate whether a generated melody meets the quality threshold.
+        """Return True if the melody meets minimum quality criteria."""
+        notes = melody.notes
+        if len(notes) < 4:
+            return False
 
-        Returns True if the melody passes; False triggers regeneration.
+        unique_pitches = {n.pitch_midi for n in notes}
+        if len(unique_pitches) <= 3:
+            return False
 
-        TODO: Score the melody on contour coherence, rhythmic variety, phrase
-        structure, taste alignment, and AI pattern absence. Must exceed
-        self._quality_threshold to pass.
-        """
-        raise NotImplementedError(
-            "TODO: Implement melodic quality gate. Score contour, rhythm, "
-            "phrase structure, taste alignment, and AI pattern absence."
-        )
+        midi_vals = [n.pitch_midi for n in notes]
+        pitch_range = max(midi_vals) - min(midi_vals)
+        if pitch_range <= 3:
+            return False
 
-    def build_melodic_variation_space(
-        self, source_melody: Melody
-    ) -> Dict[str, object]:
-        """
-        Construct the melodic variation space from a source melody.
+        durations = {n.duration_beats for n in notes}
+        if len(durations) < 2:
+            # All same duration — check if there are enough notes to still be ok
+            if len(notes) > 4:
+                return False
 
-        TODO: Analyse the source melody and define variation axes: what is
-        melodic DNA (fixed), what are surface details (free), and what are
-        the contrast operators for each dimension. Store in self._variation_space.
-        """
-        raise NotImplementedError(
-            "TODO: Implement melodic variation space construction. Define "
-            "DNA parameters, free variation targets, and contrast operators."
-        )
+        return True

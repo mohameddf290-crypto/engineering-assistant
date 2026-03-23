@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Chord & Melody Generator</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <header class="app-header">
+            <div class="logo">🎵 Infinite Generator</div>
+            <nav class="main-nav">
+                <button class="nav-btn active" id="nav-chords" onclick="app.showView('chords')">Chord Generator</button>
+                <button class="nav-btn" id="nav-melodies" onclick="app.showView('melodies')">Melody Generator</button>
+            </nav>
+        </header>
+        
+        <!-- CHORD VIEW -->
+        <div id="chords-view" class="view active">
+            <div class="view-layout">
+                <div class="main-panel">
+                    <h2>Chord Generator</h2>
+                    
+                    <section class="input-section">
+                        <h3>Select Emotions</h3>
+                        <div class="emotion-chips" id="emotion-chips"></div>
+                    </section>
+                    
+                    <section class="input-section">
+                        <h3>Or Type a Prompt</h3>
+                        <input type="text" id="chord-prompt" class="text-input" placeholder="Describe the feeling... (e.g. 'dark and driving', 'warm summer evening')">
+                    </section>
+                    
+                    <section class="input-section">
+                        <h3>Or Upload Audio</h3>
+                        <div class="drop-zone" id="chord-audio-drop">
+                            <span>Drop audio file here or click to upload</span>
+                            <input type="file" id="chord-audio-input" accept="audio/*" style="display:none">
+                        </div>
+                    </section>
+                    
+                    <section class="controls-section">
+                        <div class="control-row">
+                            <div class="control-group">
+                                <label>Key</label>
+                                <select id="key-select" class="select-input">
+                                    <option>C</option><option>C#</option><option>D</option><option>D#</option>
+                                    <option>E</option><option>F</option><option>F#</option><option>G</option>
+                                    <option>G#</option><option>A</option><option>A#</option><option>B</option>
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label>Scale</label>
+                                <select id="scale-select" class="select-input">
+                                    <option value="major">Major</option>
+                                    <option value="minor">Minor</option>
+                                    <option value="dorian">Dorian</option>
+                                    <option value="mixolydian">Mixolydian</option>
+                                    <option value="phrygian">Phrygian</option>
+                                    <option value="lydian">Lydian</option>
+                                    <option value="harmonic_minor">Harmonic Minor</option>
+                                    <option value="melodic_minor">Melodic Minor</option>
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label>Length</label>
+                                <div class="toggle-group">
+                                    <button class="toggle-btn active" data-value="4" id="len-4" onclick="chordsUI.setLength(4)">4 bars</button>
+                                    <button class="toggle-btn" data-value="8" id="len-8" onclick="chordsUI.setLength(8)">8 bars</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                    
+                    <section class="action-section">
+                        <button class="btn btn-primary" onclick="chordsUI.generate()">🎲 Generate</button>
+                        <button class="btn btn-secondary" onclick="chordsUI.regenerateSimilar()">♻️ Regenerate Similar</button>
+                        <button class="btn btn-secondary" onclick="chordsUI.regenerateDifferent()">🔀 Regenerate Different</button>
+                        <button class="btn btn-accent" onclick="chordsUI.keepProgression()">💾 Keep</button>
+                        <button class="btn btn-secondary" onclick="chordsUI.elongate()">📏 Elongate</button>
+                        <button class="btn btn-secondary" onclick="chordsUI.mix()">🎛️ Mix Selected</button>
+                    </section>
+                    
+                    <section class="display-section">
+                        <div id="chord-display" class="chord-display">
+                            <p class="placeholder-text">Generate a chord progression to see it here</p>
+                        </div>
+                        <div id="chord-piano-roll" class="piano-roll-container">
+                            <canvas id="chord-canvas" width="800" height="200"></canvas>
+                        </div>
+                    </section>
+                    
+                    <section class="action-section">
+                        <button class="btn btn-primary" onclick="chordsUI.proceedToMelodies()">Proceed to Melodies →</button>
+                    </section>
+                </div>
+                
+                <aside class="sidebar">
+                    <h3>Kept Progressions</h3>
+                    <div id="kept-progressions" class="kept-list"></div>
+                </aside>
+            </div>
+        </div>
+        
+        <!-- MELODY VIEW -->
+        <div id="melodies-view" class="view">
+            <div class="view-layout">
+                <div class="main-panel">
+                    <h2>Melody Generator</h2>
+                    
+                    <section class="input-section">
+                        <h3>Chord Progression</h3>
+                        <div id="melody-chord-display" class="chord-display mini">
+                            <p class="placeholder-text">No progression selected. Go to Chord Generator or enter manually.</p>
+                        </div>
+                        <input type="text" id="manual-chords" class="text-input" placeholder="Or enter chords manually: Cmaj7 Am7 Fmaj7 G7">
+                    </section>
+                    
+                    <section class="input-section">
+                        <h3>Or Upload Audio for Melody Inspiration</h3>
+                        <div class="drop-zone" id="melody-audio-drop">
+                            <span>Drop audio file here or click to upload</span>
+                            <input type="file" id="melody-audio-input" accept="audio/*" style="display:none">
+                        </div>
+                    </section>
+                    
+                    <section class="controls-section">
+                        <div class="control-row">
+                            <div class="control-group">
+                                <label>Complexity</label>
+                                <div class="toggle-group">
+                                    <button class="toggle-btn" onclick="melodiesUI.setComplexity('simple')">Simple</button>
+                                    <button class="toggle-btn active" onclick="melodiesUI.setComplexity('medium')">Medium</button>
+                                    <button class="toggle-btn" onclick="melodiesUI.setComplexity('complex')">Complex</button>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label>Mode</label>
+                                <div class="toggle-group">
+                                    <button class="toggle-btn active" onclick="melodiesUI.setMode('normal')">Normal</button>
+                                    <button class="toggle-btn" onclick="melodiesUI.setMode('hybrid')">Hybrid</button>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label>Length</label>
+                                <div class="toggle-group">
+                                    <button class="toggle-btn active" onclick="melodiesUI.setLength(4)">4 bars</button>
+                                    <button class="toggle-btn" onclick="melodiesUI.setLength(8)">8 bars</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="control-row">
+                            <div class="control-group">
+                                <label>Role</label>
+                                <div class="toggle-group role-group">
+                                    <button class="toggle-btn active" onclick="melodiesUI.setRole('lead')">Lead</button>
+                                    <button class="toggle-btn" onclick="melodiesUI.setRole('counter_melody')">Counter</button>
+                                    <button class="toggle-btn" onclick="melodiesUI.setRole('ear_candy')">Ear Candy</button>
+                                    <button class="toggle-btn" onclick="melodiesUI.setRole('pad_melody')">Pad</button>
+                                    <button class="toggle-btn" onclick="melodiesUI.setRole('bass_line')">Bass</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                    
+                    <section class="action-section">
+                        <button class="btn btn-primary" onclick="melodiesUI.generate()">🎲 Generate</button>
+                        <button class="btn btn-secondary" onclick="melodiesUI.regenerateSimilar()">♻️ Similar</button>
+                        <button class="btn btn-secondary" onclick="melodiesUI.regenerateDifferent()">🔀 Different</button>
+                        <button class="btn btn-secondary" onclick="melodiesUI.elongate()">📏 Elongate</button>
+                        <button class="btn btn-accent" onclick="melodiesUI.addRole()">+ Add Role</button>
+                    </section>
+                    
+                    <section class="display-section">
+                        <div class="roles-panel" id="roles-panel"></div>
+                        <div id="melody-piano-roll" class="piano-roll-container">
+                            <canvas id="melody-canvas" width="800" height="300"></canvas>
+                        </div>
+                    </section>
+                    
+                    <section class="transport-section">
+                        <div class="transport-controls">
+                            <button class="transport-btn" id="play-btn" onclick="playback.togglePlay()">▶ Play</button>
+                            <button class="transport-btn" onclick="playback.stop()">⏹ Stop</button>
+                            <div class="control-group">
+                                <label>BPM: <span id="bpm-display">120</span></label>
+                                <input type="range" id="bpm-slider" min="60" max="200" value="120" oninput="playback.setBPM(this.value)">
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                
+                <aside class="sidebar">
+                    <h3>Active Roles</h3>
+                    <div id="active-roles" class="roles-list"></div>
+                    <h3>Transport</h3>
+                    <div class="sidebar-transport">
+                        <button class="btn btn-primary" onclick="playback.playChordsOnly()">▶ Chords Only</button>
+                        <button class="btn btn-primary" onclick="playback.playAll()">▶ Play All</button>
+                        <button class="btn btn-secondary" onclick="playback.stop()">⏹ Stop</button>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/piano-roll.js"></script>
+    <script src="/js/playback.js"></script>
+    <script src="/js/chords-ui.js"></script>
+    <script src="/js/melodies-ui.js"></script>
+</body>
+</html>

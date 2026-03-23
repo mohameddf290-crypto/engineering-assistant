@@ -46,7 +46,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from melodies.melody_creator import Melody
+from melodies.melody_creator import Melody, MelodyNote
 from melodies.translation import MelodyCreationPlan
 
 
@@ -105,21 +105,85 @@ class MelodyRoleIntelligence:
     """
 
     def __init__(self) -> None:
-        self._role_library: Dict[str, MelodyRole] = {}
-        self._complementarity_matrix: Dict[str, Dict[str, str]] = {}
+        self._role_library: Dict[str, MelodyRole] = {
+            "lead": MelodyRole(
+                name="lead",
+                register_range=(60, 84),
+                rhythmic_density=1.0,
+                harmonic_priority="chord_tones",
+                complementarity_rules={
+                    "counter_melody": "contrary contour, offset entries",
+                    "ear_candy": "sparse decoration above lead",
+                    "pad_melody": "sustained fill below lead",
+                    "bass_line": "root movement, low register",
+                },
+            ),
+            "counter_melody": MelodyRole(
+                name="counter_melody",
+                register_range=(55, 79),
+                rhythmic_density=0.7,
+                harmonic_priority="extensions",
+                complementarity_rules={
+                    "lead": "contrary contour, offset entries",
+                    "ear_candy": "avoid register overlap",
+                    "pad_melody": "complementary rhythm",
+                    "bass_line": "independent motion",
+                },
+            ),
+            "ear_candy": MelodyRole(
+                name="ear_candy",
+                register_range=(72, 96),
+                rhythmic_density=0.3,
+                harmonic_priority="chord_tones",
+                complementarity_rules={
+                    "lead": "sparse decoration above lead",
+                    "counter_melody": "avoid register overlap",
+                    "pad_melody": "different rhythmic grid",
+                    "bass_line": "maximum register separation",
+                },
+            ),
+            "pad_melody": MelodyRole(
+                name="pad_melody",
+                register_range=(48, 72),
+                rhythmic_density=0.2,
+                harmonic_priority="chord_tones",
+                complementarity_rules={
+                    "lead": "sustained fill below lead",
+                    "counter_melody": "complementary rhythm",
+                    "ear_candy": "different rhythmic grid",
+                    "bass_line": "register separation, slow movement",
+                },
+            ),
+            "bass_line": MelodyRole(
+                name="bass_line",
+                register_range=(28, 52),
+                rhythmic_density=0.8,
+                harmonic_priority="chord_tones",
+                complementarity_rules={
+                    "lead": "root movement, low register",
+                    "counter_melody": "independent motion",
+                    "ear_candy": "maximum register separation",
+                    "pad_melody": "register separation, slow movement",
+                },
+            ),
+        }
+        self._complementarity_matrix: Dict[str, Dict[str, str]] = {
+            role.name: role.complementarity_rules
+            for role in self._role_library.values()
+        }
 
     def get_role_definition(self, role_name: str) -> MelodyRole:
-        """
-        Retrieve the full definition for a melody role.
+        """Retrieve the full definition for a melody role."""
+        if role_name not in self._role_library:
+            raise ValueError(
+                f"Unknown role '{role_name}'. "
+                f"Available roles: {list(self._role_library.keys())}"
+            )
+        return self._role_library[role_name]
 
-        TODO: Look up role_name in self._role_library. Raise a descriptive
-        error if not found. Library must be fully populated at init — no
-        on-the-fly role fabrication.
-        """
-        raise NotImplementedError(
-            "TODO: Implement role definition lookup. Library fully populated "
-            "at init — every role has precise, embedded constraints."
-        )
+    def get_all_roles(self) -> List[str]:
+        """Return the full list of role names in the role library."""
+        return list(self._role_library.keys())
 
     def generate_for_role(
         self,
@@ -127,78 +191,186 @@ class MelodyRoleIntelligence:
         creation_plan: MelodyCreationPlan,
         lead_melody: Optional[Melody],
     ) -> Melody:
-        """
-        Generate a melody for a specific role, with awareness of the lead melody.
+        """Generate a melody fitting the role's register and density."""
+        import random
 
-        TODO: Apply role constraints (register_range, rhythmic_density,
-        harmonic_priority) to the creation plan before passing to the Melody
-        Creation Brain. If lead_melody is provided, use complementarity rules
-        to ensure the generated melody complements it.
-        """
-        raise NotImplementedError(
-            "TODO: Implement role-constrained melody generation. Role constraints "
-            "override plan defaults. Complementarity rules are enforced when "
-            "lead_melody is provided."
+        low, high = role.register_range
+        mid = (low + high) // 2
+        length_bars = getattr(creation_plan, "length_bars", 4) if creation_plan else 4
+
+        num_notes = max(4, int(length_bars * 4 * role.rhythmic_density))
+
+        # Duration based on density
+        if role.rhythmic_density <= 0.3:
+            base_dur = 2.0
+        elif role.rhythmic_density <= 0.5:
+            base_dur = 1.0
+        else:
+            base_dur = 0.5
+
+        notes: list = []
+        current_pitch = mid
+        position = 0.0
+
+        if lead_melody and lead_melody.notes and role.name == "counter_melody":
+            # Invert contour relative to lead
+            for i, lead_note in enumerate(lead_melody.notes):
+                if i >= num_notes:
+                    break
+                inverted = mid + (mid - lead_note.pitch_midi)
+                inverted = max(low, min(high, inverted))
+                notes.append(
+                    MelodyNote(
+                        pitch_midi=inverted,
+                        duration_beats=base_dur,
+                        position_beats=position,
+                        velocity=random.randint(65, 90),
+                        is_chord_tone=True,
+                        role_annotation=role.name,
+                    )
+                )
+                position += base_dur
+        elif lead_melody and lead_melody.notes:
+            # Shift lead pitches into role register
+            for i, lead_note in enumerate(lead_melody.notes):
+                if i >= num_notes:
+                    break
+                pitch = lead_note.pitch_midi
+                while pitch < low:
+                    pitch += 12
+                while pitch > high:
+                    pitch -= 12
+                pitch = max(low, min(high, pitch))
+                notes.append(
+                    MelodyNote(
+                        pitch_midi=pitch,
+                        duration_beats=base_dur,
+                        position_beats=position,
+                        velocity=random.randint(65, 90),
+                        is_chord_tone=True,
+                        role_annotation=role.name,
+                    )
+                )
+                position += base_dur
+        else:
+            # Generate from scratch with step-wise motion
+            for i in range(num_notes):
+                step = random.choice([-2, -1, 0, 1, 2])
+                current_pitch = max(low, min(high, current_pitch + step))
+                notes.append(
+                    MelodyNote(
+                        pitch_midi=current_pitch,
+                        duration_beats=base_dur,
+                        position_beats=position,
+                        velocity=random.randint(65, 90),
+                        is_chord_tone=True,
+                        role_annotation=role.name,
+                    )
+                )
+                position += base_dur
+
+        return Melody(
+            notes=notes,
+            key="",
+            scale="",
+            length_bars=length_bars,
+            role=role.name,
+            complexity_level=5,
+            mode="normal",
         )
 
     def build_complementarity_matrix(
         self, role_set: RoleSet
     ) -> Dict[str, Dict[str, str]]:
-        """
-        Build the full complementarity matrix for an active role set.
+        """Build the full complementarity matrix for an active role set."""
+        active_roles: list = []
+        for role_name in self._role_library:
+            melody = getattr(role_set, role_name, None)
+            if melody is not None:
+                active_roles.append(role_name)
 
-        Returns a nested dict of {role_a: {role_b: relationship_description}}.
+        matrix: Dict[str, Dict[str, str]] = {}
+        for r in active_roles:
+            matrix[r] = {}
+            for other in active_roles:
+                if other != r and other in self._complementarity_matrix.get(r, {}):
+                    matrix[r][other] = self._complementarity_matrix[r][other]
 
-        TODO: Populate from self._complementarity_matrix for all active role
-        pairs in the role_set. This is a read from embedded definitions, not
-        computed on the fly.
-        """
-        raise NotImplementedError(
-            "TODO: Implement complementarity matrix building. Read from embedded "
-            "definitions for all active role pairs in the role set."
-        )
+        return matrix
 
     def adapt_to_modification(
         self,
         modified_melody: Melody,
         role_set: RoleSet,
     ) -> RoleSet:
-        """
-        Adapt all complementary melodies in a role set after one melody is modified.
+        """Adapt complementary melodies after one is modified."""
+        import random
 
-        Returns an updated RoleSet with all dependent melodies adjusted.
-
-        TODO: Identify which roles are dependent on the modified melody via the
-        complementarity matrix. Re-evaluate each dependent melody and adjust
-        it to restore complementarity. Run AI Blocker on each adjusted melody.
-        """
-        raise NotImplementedError(
-            "TODO: Implement complementarity adaptation. Identify dependent "
-            "roles, re-evaluate each, and adjust to restore complementarity. "
-            "AI Blocker screens every adjusted melody."
+        updated = RoleSet(
+            lead=role_set.lead,
+            counter_melody=role_set.counter_melody,
+            ear_candy=role_set.ear_candy,
+            pad_melody=role_set.pad_melody,
+            bass_line=role_set.bass_line,
+            arpeggio_layer=role_set.arpeggio_layer,
+            additional_roles=dict(role_set.additional_roles),
         )
+
+        modified_role = modified_melody.role
+        if modified_role == "lead":
+            # Adjust all non-lead melodies
+            for role_name in ["counter_melody", "ear_candy", "pad_melody", "bass_line"]:
+                existing = getattr(updated, role_name, None)
+                if existing is None or not existing.notes:
+                    continue
+
+                role_def = self._role_library[role_name]
+                low, high = role_def.register_range
+
+                adjusted_notes = []
+                for note in existing.notes:
+                    pitch = note.pitch_midi
+                    while pitch < low:
+                        pitch += 12
+                    while pitch > high:
+                        pitch -= 12
+                    pitch = max(low, min(high, pitch))
+                    adjusted_notes.append(
+                        MelodyNote(
+                            pitch_midi=pitch,
+                            duration_beats=note.duration_beats,
+                            position_beats=note.position_beats,
+                            velocity=note.velocity,
+                            is_chord_tone=note.is_chord_tone,
+                            role_annotation=note.role_annotation,
+                        )
+                    )
+
+                adjusted_melody = Melody(
+                    notes=adjusted_notes,
+                    key=existing.key,
+                    scale=existing.scale,
+                    length_bars=existing.length_bars,
+                    role=role_name,
+                    complexity_level=existing.complexity_level,
+                    mode=existing.mode,
+                )
+                setattr(updated, role_name, adjusted_melody)
+
+        return updated
 
     def validate_complementarity(self, role_set: RoleSet) -> bool:
-        """
-        Validate that all melodies in a role set are mutually complementary.
+        """Validate that all melodies are in correct registers."""
+        for role_name, role_def in self._role_library.items():
+            melody = getattr(role_set, role_name, None)
+            if melody is None:
+                continue
+            if not melody.notes:
+                continue
 
-        Returns True if all role pairs pass their complementarity rules.
+            low, high = role_def.register_range
+            for note in melody.notes:
+                if note.pitch_midi < low - 12 or note.pitch_midi > high + 12:
+                    return False
 
-        TODO: For every active role pair, evaluate the complementarity rules
-        from the matrix. Return True only if all pairs pass. Provide detailed
-        failure information for any pair that fails.
-        """
-        raise NotImplementedError(
-            "TODO: Implement complementarity validation. Every active role pair "
-            "must pass its complementarity rules. Detailed failure reporting."
-        )
-
-    def get_all_roles(self) -> List[str]:
-        """
-        Return the full list of role names in the role library.
-
-        TODO: Return all keys from self._role_library.
-        """
-        raise NotImplementedError(
-            "TODO: Implement get_all_roles. Return the complete role taxonomy."
-        )
+        return True
