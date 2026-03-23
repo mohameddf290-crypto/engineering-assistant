@@ -79,6 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             app.state.currentProgression = result;
             chordsUI.displayProgression(result);
             pianoRoll.renderChords('chord-canvas', result.progression, chordsUI.currentLength);
+            playback.loadData(result.progression, app.state.currentMelodies);
         } catch (e) {
             app.showError('Audio analysis failed: ' + e.message);
         }

@@ -24,6 +24,7 @@ const chordsUI = {
             app.state.currentScale = scale;
             this.displayProgression(result);
             pianoRoll.renderChords('chord-canvas', result.progression, this.currentLength);
+            playback.loadData(result.progression, app.state.currentMelodies);
         } catch (e) {
             app.showError('Failed to generate chords: ' + e.message);
         } finally {
@@ -41,6 +42,7 @@ const chordsUI = {
             app.state.currentProgression = result;
             this.displayProgression(result);
             pianoRoll.renderChords('chord-canvas', result.progression, this.currentLength);
+            playback.loadData(result.progression, app.state.currentMelodies);
         } catch (e) {
             app.showError('Failed: ' + e.message);
         }
@@ -56,6 +58,7 @@ const chordsUI = {
             app.state.currentProgression = result;
             this.displayProgression(result);
             pianoRoll.renderChords('chord-canvas', result.progression, this.currentLength);
+            playback.loadData(result.progression, app.state.currentMelodies);
         } catch (e) {
             app.showError('Failed: ' + e.message);
         }
@@ -109,6 +112,7 @@ const chordsUI = {
             app.state.currentProgression = result;
             this.displayProgression(result);
             pianoRoll.renderChords('chord-canvas', result.progression, this.currentLength);
+            playback.loadData(result.progression, app.state.currentMelodies);
         } catch (e) {
             app.showError('Mix failed: ' + e.message);
         }
@@ -124,6 +128,7 @@ const chordsUI = {
             app.state.currentProgression = result;
             this.displayProgression(result);
             pianoRoll.renderChords('chord-canvas', result.progression, result.progression.length);
+            playback.loadData(result.progression, app.state.currentMelodies);
         } catch (e) {
             app.showError('Elongate failed: ' + e.message);
         }
@@ -141,6 +146,12 @@ const chordsUI = {
                 <span class="chord-duration">${chord.duration_beats || 4}b</span>`;
             container.appendChild(div);
         });
+    },
+
+    async playChords() {
+        if (!app.state.currentProgression) return app.showError('Generate chords first');
+        playback.loadData(app.state.currentProgression.progression, app.state.currentMelodies);
+        await playback.playChordsOnly();
     },
 
     proceedToMelodies() {

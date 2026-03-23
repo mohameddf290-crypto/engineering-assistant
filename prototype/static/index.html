@@ -91,6 +91,17 @@
                         </div>
                     </section>
                     
+                    <section class="transport-section">
+                        <div class="transport-controls">
+                            <button class="transport-btn" id="chord-play-btn" onclick="chordsUI.playChords()">▶ Play Chords</button>
+                            <button class="transport-btn" onclick="playback.stop()">⏹ Stop</button>
+                            <div class="control-group">
+                                <label>BPM: <span id="chord-bpm-display">120</span></label>
+                                <input type="range" id="chord-bpm-slider" min="60" max="200" value="120" oninput="playback.setBPM(this.value);">
+                            </div>
+                        </div>
+                    </section>
+
                     <section class="action-section">
                         <button class="btn btn-primary" onclick="chordsUI.proceedToMelodies()">Proceed to Melodies →</button>
                     </section>
@@ -205,7 +216,7 @@
         </div>
     </div>
     
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js" integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="/js/app.js"></script>
     <script src="/js/piano-roll.js"></script>
     <script src="/js/playback.js"></script>

@@ -9,6 +9,8 @@ const playback = {
         this.bpm = parseInt(bpm);
         const display = document.getElementById('bpm-display');
         if (display) display.textContent = bpm;
+        const chordDisplay = document.getElementById('chord-bpm-display');
+        if (chordDisplay) chordDisplay.textContent = bpm;
         if (typeof Tone !== 'undefined') Tone.getTransport().bpm.value = this.bpm;
     },
 
