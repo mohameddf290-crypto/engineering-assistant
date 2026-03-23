@@ -112,7 +112,7 @@ class MelodyInfinityEngine:
         register = (min(midi_values), max(midi_values))
 
         total_beats = max(
-            (n.position_beats + n.duration_beats for n in notes), default=1.0
+            (n.position_beats + n.duration_beats for n in notes),
         )
         density = len(notes) / total_beats if total_beats > 0 else 0.0
 
@@ -312,9 +312,7 @@ class MelodyInfinityEngine:
             return False
 
         durations = {n.duration_beats for n in notes}
-        if len(durations) < 2:
-            # All same duration — check if there are enough notes to still be ok
-            if len(notes) > 4:
-                return False
+        if len(durations) < 2 and len(notes) <= 4:
+            return False
 
         return True

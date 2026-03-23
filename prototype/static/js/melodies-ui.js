@@ -26,7 +26,7 @@ const melodiesUI = {
     },
 
     _updateToggle(selector, value, options) {
-        // Simple toggle highlight by text content
+        // Not used — role toggles are handled inline in setRole
     },
 
     setProgression(prog) {
