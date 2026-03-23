@@ -111,9 +111,8 @@ class MelodyInfinityEngine:
         midi_values = [n.pitch_midi for n in notes]
         register = (min(midi_values), max(midi_values))
 
-        total_beats = max(
-            (n.position_beats + n.duration_beats for n in notes),
-        )
+        end_positions = [n.position_beats + n.duration_beats for n in notes]
+        total_beats = max(end_positions) if end_positions else 1.0
         density = len(notes) / total_beats if total_beats > 0 else 0.0
 
         self._variation_space = {

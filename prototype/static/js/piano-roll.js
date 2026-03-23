@@ -128,7 +128,7 @@ const pianoRoll = {
             if (b % 4 === 0) {
                 ctx.fillStyle = 'rgba(255,255,255,0.5)';
                 ctx.font = '9px monospace';
-                ctx.fillText('B' + (b / 4 + 1), x + 2, canvas.height - 3);
+                ctx.fillText('Bar' + (b / 4 + 1), x + 2, canvas.height - 3);
             }
         }
 

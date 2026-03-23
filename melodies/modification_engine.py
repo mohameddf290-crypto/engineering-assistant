@@ -161,27 +161,25 @@ class ModificationEngine:
             applied: Dict[str, object] = {}
 
             for attr, value in change.items():
+                # Narrow the generic `object` value to a numeric primitive via str() for safe casting
+                raw: object = value
                 if attr == "pitch_midi":
-                    val = int(value)  # type: ignore[arg-type]
-                    if val < 0 or val > 127:
-                        val = max(0, min(127, val))
-                        was_corrected = True
+                    val = max(0, min(127, int(float(str(raw)))))
                     note.pitch_midi = val
                     applied[attr] = val
                 elif attr == "duration_beats":
-                    val_f = float(value)  # type: ignore[arg-type]
+                    val_f = float(str(raw))
                     if val_f <= 0:
                         val_f = 0.25
                         was_corrected = True
                     note.duration_beats = val_f
                     applied[attr] = val_f
                 elif attr == "velocity":
-                    val = int(value)  # type: ignore[arg-type]
-                    val = max(1, min(127, val))
+                    val = max(1, min(127, int(float(str(raw)))))
                     note.velocity = val
                     applied[attr] = val
                 elif attr == "position_beats":
-                    val_f = float(value)  # type: ignore[arg-type]
+                    val_f = float(str(raw))
                     if val_f < 0:
                         val_f = 0.0
                         was_corrected = True

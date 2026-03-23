@@ -95,6 +95,47 @@ class RoleSet:
     arpeggio_layer: Optional[Melody] = None
     additional_roles: Dict[str, Melody] = field(default_factory=dict)
 
+    # Core named slots for type-safe access
+    _NAMED_ROLES: List[str] = field(
+        default_factory=lambda: ["lead", "counter_melody", "ear_candy", "pad_melody", "bass_line", "arpeggio_layer"],
+        repr=False,
+        compare=False,
+    )
+
+    def get_melody(self, role_name: str) -> Optional[Melody]:
+        """Return the melody for *role_name* using a dict-based lookup (type-safe)."""
+        named: Dict[str, Optional[Melody]] = {
+            "lead": self.lead,
+            "counter_melody": self.counter_melody,
+            "ear_candy": self.ear_candy,
+            "pad_melody": self.pad_melody,
+            "bass_line": self.bass_line,
+            "arpeggio_layer": self.arpeggio_layer,
+        }
+        if role_name in named:
+            return named[role_name]
+        return self.additional_roles.get(role_name)
+
+    def set_melody(self, role_name: str, melody: Optional[Melody]) -> None:
+        """Set the melody for *role_name* using explicit attribute assignment (type-safe)."""
+        if role_name == "lead":
+            self.lead = melody
+        elif role_name == "counter_melody":
+            self.counter_melody = melody
+        elif role_name == "ear_candy":
+            self.ear_candy = melody
+        elif role_name == "pad_melody":
+            self.pad_melody = melody
+        elif role_name == "bass_line":
+            self.bass_line = melody
+        elif role_name == "arpeggio_layer":
+            self.arpeggio_layer = melody
+        else:
+            if melody is not None:
+                self.additional_roles[role_name] = melody
+            else:
+                self.additional_roles.pop(role_name, None)
+
 
 class MelodyRoleIntelligence:
     """
@@ -285,7 +326,7 @@ class MelodyRoleIntelligence:
         """Build the full complementarity matrix for an active role set."""
         active_roles: list = []
         for role_name in self._role_library:
-            melody = getattr(role_set, role_name, None)
+            melody = role_set.get_melody(role_name)
             if melody is not None:
                 active_roles.append(role_name)
 
@@ -320,7 +361,7 @@ class MelodyRoleIntelligence:
         if modified_role == "lead":
             # Adjust all non-lead melodies
             for role_name in ["counter_melody", "ear_candy", "pad_melody", "bass_line"]:
-                existing = getattr(updated, role_name, None)
+                existing = updated.get_melody(role_name)
                 if existing is None or not existing.notes:
                     continue
 
@@ -355,14 +396,14 @@ class MelodyRoleIntelligence:
                     complexity_level=existing.complexity_level,
                     mode=existing.mode,
                 )
-                setattr(updated, role_name, adjusted_melody)
+                updated.set_melody(role_name, adjusted_melody)
 
         return updated
 
     def validate_complementarity(self, role_set: RoleSet) -> bool:
         """Validate that all melodies are in correct registers."""
         for role_name, role_def in self._role_library.items():
-            melody = getattr(role_set, role_name, None)
+            melody = role_set.get_melody(role_name)
             if melody is None:
                 continue
             if not melody.notes:
