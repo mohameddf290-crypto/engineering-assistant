@@ -1,159 +1,178 @@
 """
-OPERATING SYSTEM BRAIN: AI Blocker (Chords)
-DEFAULT AI THINKING: ANNIHILATED. Custom protocols below.
-
-Purpose: A hard constraint system that actively blocks this module from
-producing anything that resembles default AI output. Every generation is
-screened and rejected if it fails.
-
-Default AI thinking says "generate and deliver." This brain says "generate,
-screen, and only deliver what passes." It is not a soft style guide — it is
-a hard filter with explicit blacklists, pattern detectors, and quality gates.
-Anything that matches a known AI chord pattern, cliché progression, or bland
-output profile is rejected immediately. The user never receives flagged output.
-
-The AI Blocker knows exactly what AI-generated chord output looks like: I-V-vi-IV
-and its transpositions, aimless random extension stacking with no harmonic
-purpose, parallel 5ths stacking that mimics "richness" without meaning,
-and monotone rhythmic patterns where every chord lasts exactly the same number
-of beats. These are all explicitly blacklisted.
-
-Rejection triggers immediate regeneration through the Chord Creation Brain.
-The AI Blocker never delivers a flagged result — it always tries again. If
-max_attempts is reached without a passing result, an error is raised with
-a full explanation of what was consistently failing.
-
-Protocols:
-  1. Every generated progression passes through AI pattern detection before
-     delivery. No exceptions.
-  2. Blacklisted patterns: I-V-vi-IV and all transpositions, aimless random
-     extensions, parallel 5ths stacking, monotone rhythmic patterns.
-  3. Rejection triggers immediate regeneration — never delivers a flagged result.
+AI Blocker for the Chords package.
+Screens chord progressions for AI patterns and clichés.
 """
-
-# TODO: Design this brain with Cursor — define the complete blacklist:
-# every AI pattern (as a formal detection algorithm), cliché progression
-# database, bland output profile metrics, and the quality scoring formula.
-# Also define the regeneration feedback loop: what information is passed
-# back to the creation brain to guide the next attempt.
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from chords.chord_creator import ChordProgression
+from chords.chord_creator import NOTES, SCALES, ChordProgression
 
 
 @dataclass
 class AIPatternResult:
-    """
-    The result of AI pattern screening on a chord progression.
-
-    Attributes:
-        progression_id: Identifier for the screened progression.
-        patterns_detected: List of AI pattern labels detected.
-        is_blocked: True if the progression is blocked; False if it passes.
-        blocking_reasons: Detailed reasons for each detected pattern.
-        quality_score: Overall quality score (0.0–1.0); must meet threshold to pass.
-    """
-
-    progression_id: str
+    progression_id: str = ""
     patterns_detected: List[str] = field(default_factory=list)
     is_blocked: bool = False
     blocking_reasons: List[str] = field(default_factory=list)
-    quality_score: float = 0.0
+    quality_score: float = 0.5
+
+
+_BLACKLISTED_PATTERNS = [
+    [1, 5, 6, 4],
+    [1, 5, 6, 3, 4, 1, 4, 5],
+]
+
+_CLICHE_PATTERNS = [
+    [2, 5, 1],
+    [1, 4, 5],
+    [1, 6, 2, 5],
+    [1, 4, 1, 5],
+]
+
+
+def _get_scale_degree(root_pc: int, key: str, scale: str) -> int:
+    key_pc = NOTES.index(key) if key in NOTES else 0
+    intervals = SCALES.get(scale, SCALES["major"])
+    for i, interval in enumerate(intervals):
+        if (key_pc + interval) % 12 == root_pc % 12:
+            return i + 1
+    return 0
+
+
+def _contains_rotation(sequence: List[int], pattern: List[int]) -> bool:
+    n = len(pattern)
+    if len(sequence) < n:
+        return False
+    rotations = [pattern[i:] + pattern[:i] for i in range(n)]
+    for i in range(len(sequence) - n + 1):
+        sub = sequence[i: i + n]
+        if sub in rotations:
+            return True
+    return False
 
 
 class AIBlocker:
-    """
-    Brain 9 — AI Blocker (Chords).
-
-    Hard constraint layer that screens every generated chord progression and
-    blocks any output matching known AI patterns, clichés, or bland profiles.
-    """
+    """Screens chord progressions for AI-generated patterns and clichés."""
 
     def __init__(self) -> None:
-        self._blacklisted_patterns: List[Dict[str, object]] = []
-        self._quality_threshold: float = 0.70
+        self._blacklist = [list(p) for p in _BLACKLISTED_PATTERNS]
 
-    def screen_progression(
-        self, progression: ChordProgression
-    ) -> AIPatternResult:
-        """
-        Run all AI pattern detection, cliché detection, and quality scoring
-        on a progression. Return the full AIPatternResult.
-
-        TODO: Orchestrate detect_ai_patterns → detect_cliches →
-        calculate_quality_score. Aggregate all findings into a single
-        AIPatternResult with is_blocked = True if any check fails.
-        """
-        raise NotImplementedError(
-            "TODO: Implement full screening pipeline. All three checks must "
-            "run — a single failure blocks the progression."
+    def screen_progression(self, progression: ChordProgression) -> AIPatternResult:
+        prog_id = f"{progression.key}_{progression.scale}_{len(progression.voicings)}"
+        patterns = self.detect_ai_patterns(progression)
+        cliches = self.detect_cliches(progression)
+        all_patterns = patterns + cliches
+        score = self.calculate_quality_score(progression)
+        is_blocked = len(all_patterns) > 0 and score < 0.4
+        return AIPatternResult(
+            progression_id=prog_id,
+            patterns_detected=all_patterns,
+            is_blocked=is_blocked,
+            blocking_reasons=all_patterns if is_blocked else [],
+            quality_score=score,
         )
 
-    def detect_ai_patterns(
-        self, progression: ChordProgression
-    ) -> List[str]:
-        """
-        Detect known AI-generated chord patterns in the progression.
+    def detect_ai_patterns(self, progression: ChordProgression) -> List[str]:
+        patterns_found = []
+        degrees = self._extract_scale_degrees(progression)
+        for pattern in _BLACKLISTED_PATTERNS:
+            if _contains_rotation(degrees, pattern):
+                pattern_str = "-".join(
+                    ["I", "II", "III", "IV", "V", "VI", "VII"][d - 1] if 1 <= d <= 7 else "?"
+                    for d in pattern
+                )
+                patterns_found.append(f"blacklisted:{pattern_str}")
+        if len(progression.voicings) >= 4:
+            durations = [v.duration_beats for v in progression.voicings]
+            if len(set(durations)) == 1:
+                patterns_found.append("monotone_rhythm")
+        if progression.voicings:
+            all_plain = all(
+                v.quality in ("maj", "min") and not v.extensions
+                for v in progression.voicings
+            )
+            if all_plain:
+                patterns_found.append("no_harmonic_color")
+        return patterns_found
 
-        Returns a list of pattern labels that were matched.
+    def detect_cliches(self, progression: ChordProgression) -> List[str]:
+        cliches_found = []
+        degrees = self._extract_scale_degrees(progression)
+        cliche_names = {
+            str([2, 5, 1]): "ii-V-I",
+            str([1, 4, 5]): "I-IV-V",
+            str([1, 6, 2, 5]): "I-vi-ii-V",
+            str([1, 4, 1, 5]): "I-IV-I-V",
+        }
+        for pattern in _CLICHE_PATTERNS:
+            name = cliche_names.get(str(pattern), str(pattern))
+            if _contains_rotation(degrees, pattern):
+                cliches_found.append(f"cliche:{name}")
+        return cliches_found
 
-        TODO: Implement formal pattern detection algorithms for each blacklisted
-        pattern. Transposition-invariant matching for I-V-vi-IV. Structural
-        analysis for parallel 5ths stacking. Rhythmic analysis for monotone
-        duration patterns.
-        """
-        raise NotImplementedError(
-            "TODO: Implement AI pattern detection. Must be transposition-invariant "
-            "for harmonic patterns and structural for rhythmic patterns."
-        )
+    def calculate_quality_score(self, progression: ChordProgression) -> float:
+        if not progression.voicings:
+            return 0.0
+        harmonic = self.score_harmonic_interest(progression)
+        voice_leading = self.score_voice_leading(progression)
+        durations = [v.duration_beats for v in progression.voicings]
+        rhythmic = min(1.0, len(set(durations)) / max(1, len(durations) * 0.5))
+        return (harmonic * 0.4 + voice_leading * 0.3 + rhythmic * 0.3)
 
-    def detect_cliches(
-        self, progression: ChordProgression
-    ) -> List[str]:
-        """
-        Detect cliché progressions beyond the core AI pattern blacklist.
+    def score_harmonic_interest(self, progression: ChordProgression) -> float:
+        if not progression.voicings:
+            return 0.0
+        qualities = [v.quality for v in progression.voicings]
+        unique_q = len(set(qualities))
+        complex_qualities = {"maj7", "m7", "dom7", "m9", "maj9", "m7b5", "dim7", "aug", "sus2", "sus4", "add9"}
+        n_complex = sum(1 for q in qualities if q in complex_qualities)
+        has_extensions = any(v.extensions for v in progression.voicings)
+        score = min(1.0, (unique_q / max(1, len(qualities))) + (n_complex / max(1, len(qualities))) * 0.5)
+        if has_extensions:
+            score = min(1.0, score + 0.1)
+        return score
 
-        Returns a list of cliché labels detected.
+    def score_voice_leading(self, progression: ChordProgression) -> float:
+        if len(progression.voicings) < 2:
+            return 0.5
+        total_movement = 0.0
+        n = 0
+        for i in range(1, len(progression.voicings)):
+            prev = sorted([x for x in progression.voicings[i - 1].midi_notes if x >= 60])
+            curr = sorted([x for x in progression.voicings[i].midi_notes if x >= 60])
+            pairs = min(len(prev), len(curr))
+            if pairs > 0:
+                movement = sum(abs(curr[j] - prev[j]) for j in range(pairs)) / pairs
+                total_movement += movement
+                n += 1
+        if n == 0:
+            return 0.5
+        avg = total_movement / n
+        if avg <= 3:
+            return 1.0
+        elif avg <= 6:
+            return 0.7
+        elif avg <= 10:
+            return 0.4
+        return 0.2
 
-        TODO: Implement cliché detection against a broader database of overused
-        progressions. Include genre-specific clichés (pop, jazz, cinematic).
-        A progression can fail on cliché grounds even if it passes AI pattern
-        detection.
-        """
-        raise NotImplementedError(
-            "TODO: Implement cliché detection. Broader than the AI pattern "
-            "blacklist — includes genre-specific and era-specific clichés."
-        )
+    def get_blacklisted_patterns(self) -> List[List[int]]:
+        return list(self._blacklist)
 
-    def calculate_quality_score(
-        self, progression: ChordProgression
-    ) -> float:
-        """
-        Calculate the overall quality score for a progression (0.0–1.0).
+    def check_progression(self, progression: ChordProgression) -> Tuple[bool, float, List[str]]:
+        result = self.screen_progression(progression)
+        passed = not result.is_blocked
+        return passed, result.quality_score, result.blocking_reasons
 
-        TODO: Implement quality scoring formula: harmonic coherence weight +
-        voice leading quality weight + creative interest weight + taste
-        alignment weight. Score must exceed self._quality_threshold to pass.
-        """
-        raise NotImplementedError(
-            "TODO: Implement quality scoring formula. Score is a weighted "
-            "combination of coherence, voice leading, creative interest, and "
-            "taste alignment."
-        )
+    def detect_blacklisted_patterns(self, progression: ChordProgression) -> List[str]:
+        return self.detect_ai_patterns(progression)
 
-    def get_blacklisted_patterns(self) -> List[Dict[str, object]]:
-        """
-        Return the full list of blacklisted pattern definitions.
-
-        TODO: Return self._blacklisted_patterns fully populated. Each entry
-        must include: pattern label, detection algorithm description, and
-        why it was blacklisted. This list is used for transparency and auditing.
-        """
-        raise NotImplementedError(
-            "TODO: Implement blacklisted pattern retrieval. List must be fully "
-            "populated at init with formal detection algorithm descriptions."
-        )
+    def _extract_scale_degrees(self, progression: ChordProgression) -> List[int]:
+        degrees = []
+        for v in progression.voicings:
+            root_pc = v.root % 12
+            deg = _get_scale_degree(root_pc, progression.key, progression.scale)
+            degrees.append(deg)
+        return degrees

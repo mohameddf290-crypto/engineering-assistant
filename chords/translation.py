@@ -1,35 +1,7 @@
 """
-OPERATING SYSTEM BRAIN: Translation System (Chords)
-DEFAULT AI THINKING: ANNIHILATED. Custom protocols below.
-
-Purpose: Takes raw harmonic analysis data and converts it into a structured
-creation plan — the blueprint for crafting deep, complex chords.
-
-Default AI thinking says "pass the audio features to the generator and let it
-figure it out." That produces incoherent, unfocused output. This brain inserts
-a deliberate translation step: raw harmonic data is interpreted with musical
-intelligence and transformed into a precise, actionable creation blueprint
-before any chord generation begins.
-
-The Translation System is the bridge between analysis and creation. Nothing
-enters the Chord Creation Brain without passing through here. No raw analysis
-data touches the generator — only structured, interpreted plans.
-
-Protocols:
-  1. Every analysis result becomes a creation plan — not a parameter dump.
-     Every field in ChordCreationPlan has a specific, deliberate meaning.
-  2. The plan includes: target chord quality palette, harmonic rhythm blueprint,
-     tension/resolution strategy, and voice leading guidelines — all derived
-     from analysis with musical reasoning, not mechanical mapping.
-  3. Plans can also be built from pure emotion or prompt mappings when no audio
-     analysis input is provided.
+Translation System for the Chords package.
+Converts harmonic analysis data into structured creation plans.
 """
-
-# TODO: Design this brain with Cursor — define the full translation logic:
-# how each HarmonicAnalysisResult field maps to ChordCreationPlan fields,
-# how emotion descriptors are translated into harmonic plans, and how prompt
-# mappings are resolved. Specify all musical reasoning rules explicitly.
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -40,130 +12,128 @@ from chords.audio_analysis import HarmonicAnalysisResult
 
 @dataclass
 class ChordCreationPlan:
-    """
-    A structured blueprint for chord creation.
-
-    Attributes:
-        source_key: The tonal centre for the progression.
-        source_scale: The scale/mode to operate in.
-        chord_quality_palette: Ordered list of permitted chord qualities/types.
-        harmonic_rhythm_profile: Mapping of bar/beat positions to chord durations.
-        tension_strategy: High-level description of tension/resolution arc (e.g. "build → peak bar 3 → resolve bar 4").
-        voice_leading_rules: List of specific voice leading constraints to honour.
-        complexity_level: Target complexity on a 1–10 scale.
-        length_bars: Total desired progression length in bars.
-    """
-
-    source_key: str
-    source_scale: str
+    key: str = "C"
+    scale: str = "major"
+    length_bars: int = 8
     chord_quality_palette: List[str] = field(default_factory=list)
-    harmonic_rhythm_profile: Dict[str, float] = field(default_factory=dict)
-    tension_strategy: str = ""
+    scale_degree_weights: Dict[int, float] = field(default_factory=dict)
+    harmonic_rhythm_blueprint: List[float] = field(default_factory=list)
+    tension_strategy: str = "gradual"
     voice_leading_rules: List[str] = field(default_factory=list)
-    complexity_level: int = 5
-    length_bars: int = 4
+    target_emotions: List[str] = field(default_factory=list)
+    preferred_extensions: List[str] = field(default_factory=list)
+    borrowed_chords_allowed: bool = False
+    modal_interchange_allowed: bool = False
 
 
 class ChordTranslationSystem:
-    """
-    Brain 2b — Translation System (Chords).
+    """Translates analysis results and emotion descriptors into ChordCreationPlan."""
 
-    Converts HarmonicAnalysisResult, emotion descriptors, or prompt mappings
-    into a ChordCreationPlan ready for the Chord Creation Brain.
-    """
+    _DEGREE_WEIGHTS_MAJOR = {1: 0.25, 2: 0.10, 3: 0.10, 4: 0.20, 5: 0.20, 6: 0.10, 7: 0.05}
+    _DEGREE_WEIGHTS_MINOR = {1: 0.25, 2: 0.08, 3: 0.12, 4: 0.18, 5: 0.20, 6: 0.10, 7: 0.07}
 
-    def __init__(self) -> None:
-        pass
+    _QUALITY_PALETTES = {
+        "major": ["maj", "min", "maj7", "m7", "dom7", "add9"],
+        "minor": ["min", "m7", "m9", "maj7", "m7b5", "dim"],
+        "dorian": ["min", "m7", "dom7", "m9", "maj7"],
+        "mixolydian": ["maj", "dom7", "min", "sus4", "add9"],
+        "phrygian": ["min", "maj", "dim", "m7"],
+        "lydian": ["maj7", "maj9", "maj", "add9", "6"],
+        "harmonic_minor": ["min", "dim7", "m7b5", "aug", "dom7"],
+        "melodic_minor": ["min", "m9", "dom7", "m7b5"],
+    }
 
-    def translate_analysis_to_plan(
-        self, analysis_result: HarmonicAnalysisResult
-    ) -> ChordCreationPlan:
-        """
-        Translate a full HarmonicAnalysisResult into a ChordCreationPlan.
-
-        TODO: Apply musical reasoning to map: detected key/scale → source_key/scale,
-        chord_sequence → chord_quality_palette, harmonic_rhythm → harmonic_rhythm_profile,
-        tension_points → tension_strategy, voice_leading_patterns → voice_leading_rules.
-        Do not mechanically copy fields — interpret them.
-        """
-        raise NotImplementedError(
-            "TODO: Implement full translation from HarmonicAnalysisResult to "
-            "ChordCreationPlan with explicit musical reasoning at every step."
+    def translate_analysis_to_plan(self, analysis_result: HarmonicAnalysisResult) -> ChordCreationPlan:
+        key = analysis_result.key
+        scale = analysis_result.scale
+        palette = self.build_chord_quality_palette(analysis_result)
+        rhythm_map = self.map_harmonic_rhythm(analysis_result)
+        tension_strategy = self.define_tension_strategy(analysis_result)
+        n_chords = len(analysis_result.detected_chords) or 8
+        blueprint = analysis_result.chord_durations[:n_chords] if analysis_result.chord_durations else [2.0] * n_chords
+        length_bars = max(4, int(sum(blueprint) / 4)) if blueprint else 8
+        deg_weights = dict(self._DEGREE_WEIGHTS_MINOR if "minor" in scale else self._DEGREE_WEIGHTS_MAJOR)
+        voice_leading_rules = ["smooth_voice_leading", "avoid_parallel_fifths"]
+        return ChordCreationPlan(
+            key=key,
+            scale=scale,
+            length_bars=length_bars,
+            chord_quality_palette=palette,
+            scale_degree_weights=deg_weights,
+            harmonic_rhythm_blueprint=blueprint,
+            tension_strategy=tension_strategy,
+            voice_leading_rules=voice_leading_rules,
+            target_emotions=[],
+            preferred_extensions=["maj7", "9"] if scale == "major" else ["m7", "9"],
+            borrowed_chords_allowed=len(analysis_result.modulation_markers) > 0,
+            modal_interchange_allowed=False,
         )
 
-    def build_chord_quality_palette(
-        self, analysis_result: HarmonicAnalysisResult
-    ) -> List[str]:
-        """
-        Derive the target chord quality palette from a harmonic analysis.
+    def translate_analysis(self, analysis_result: HarmonicAnalysisResult) -> ChordCreationPlan:
+        return self.translate_analysis_to_plan(analysis_result)
 
-        TODO: Analyse the detected chord types in the source material and build
-        a palette of appropriate chord qualities. The palette should reflect the
-        sophistication level of the source — a jazz-influenced source produces
-        a richer palette than a pop source.
-        """
-        raise NotImplementedError(
-            "TODO: Implement chord quality palette derivation from analysis. "
-            "Palette must reflect source sophistication and scale/mode context."
+    def build_chord_quality_palette(self, analysis_result: HarmonicAnalysisResult) -> List[str]:
+        scale = analysis_result.scale
+        return list(self._QUALITY_PALETTES.get(scale, self._QUALITY_PALETTES["major"]))
+
+    def map_harmonic_rhythm(self, analysis_result: HarmonicAnalysisResult) -> Dict[str, float]:
+        avg = analysis_result.harmonic_rhythm or 2.0
+        return {"average": avg, "min": avg * 0.5, "max": avg * 2.0}
+
+    def define_tension_strategy(self, analysis_result: HarmonicAnalysisResult) -> str:
+        n_tension = len(analysis_result.tension_points)
+        n_chords = max(1, len(analysis_result.detected_chords))
+        ratio = n_tension / n_chords
+        if ratio > 0.5:
+            return "high_tension"
+        elif ratio > 0.25:
+            return "gradual"
+        else:
+            return "relaxed"
+
+    def plan_from_emotion(self, emotion_descriptors: List[Dict]) -> ChordCreationPlan:
+        if not emotion_descriptors:
+            return ChordCreationPlan()
+        primary = emotion_descriptors[0]
+        palette = primary.get("harmonic_qualities", ["maj7", "m7", "dom7"])
+        scale = primary.get("preferred_mode", "major")
+        tension = primary.get("tension_level", 5)
+        strategy = "high_tension" if tension > 7 else ("gradual" if tension > 4 else "relaxed")
+        deg_weights = primary.get("preferred_scale_degrees", dict(self._DEGREE_WEIGHTS_MAJOR))
+        blueprint = [2.0] * 8
+        return ChordCreationPlan(
+            key="C",
+            scale=scale,
+            length_bars=8,
+            chord_quality_palette=list(palette),
+            scale_degree_weights=dict(deg_weights),
+            harmonic_rhythm_blueprint=blueprint,
+            tension_strategy=strategy,
+            voice_leading_rules=["smooth_voice_leading"],
+            target_emotions=[primary.get("name", "unknown")],
+            preferred_extensions=list(primary.get("preferred_extensions", [])),
+            borrowed_chords_allowed=primary.get("borrowed_chords_allowed", False),
+            modal_interchange_allowed=primary.get("modal_interchange_allowed", False),
         )
 
-    def map_harmonic_rhythm(
-        self, analysis_result: HarmonicAnalysisResult
-    ) -> Dict[str, float]:
-        """
-        Derive the harmonic rhythm profile from analysis data.
-
-        TODO: Convert the raw harmonic_rhythm and chord_sequence timing data
-        into a per-bar/per-beat blueprint that guides chord duration choices
-        in the creation step.
-        """
-        raise NotImplementedError(
-            "TODO: Implement harmonic rhythm mapping from analysis to a "
-            "structured per-bar blueprint."
-        )
-
-    def define_tension_strategy(
-        self, analysis_result: HarmonicAnalysisResult
-    ) -> str:
-        """
-        Produce a human-readable tension/resolution strategy string from analysis.
-
-        TODO: Interpret tension_points and modulation_markers to define a clear
-        arc: where tension builds, where it peaks, where it resolves. Output must
-        be specific enough to guide chord selection in the creation step.
-        """
-        raise NotImplementedError(
-            "TODO: Implement tension strategy derivation. Produce a specific, "
-            "actionable arc description from tension_points and modulation_markers."
-        )
-
-    def plan_from_emotion(
-        self, emotion_descriptors: List[Dict[str, object]]
-    ) -> ChordCreationPlan:
-        """
-        Build a ChordCreationPlan directly from a list of emotion descriptors.
-
-        TODO: Map emotion descriptors (from the Emotion Description System) to
-        all ChordCreationPlan fields without any audio analysis input. Every
-        emotion must have a precise harmonic translation, not a generic one.
-        """
-        raise NotImplementedError(
-            "TODO: Implement emotion-to-plan translation. Each emotion descriptor "
-            "maps to specific key/scale choices, chord qualities, rhythm, and "
-            "tension strategy."
-        )
-
-    def plan_from_prompt_mapping(
-        self, prompt_mapping: Dict[str, object]
-    ) -> ChordCreationPlan:
-        """
-        Build a ChordCreationPlan from a prompt interpretation mapping.
-
-        TODO: Accept the output of PromptInterpreter and translate it into a
-        complete ChordCreationPlan. This path must be fully equivalent in
-        specificity to the analysis and emotion paths.
-        """
-        raise NotImplementedError(
-            "TODO: Implement prompt mapping to plan translation. Must produce "
-            "a plan as specific and actionable as the analysis path."
+    def plan_from_prompt_mapping(self, prompt_mapping: Dict) -> ChordCreationPlan:
+        emotions = prompt_mapping.get("emotions", {})
+        if not emotions:
+            return ChordCreationPlan()
+        scale = prompt_mapping.get("scale", "major")
+        key = prompt_mapping.get("key", "C")
+        palette = self._QUALITY_PALETTES.get(scale, self._QUALITY_PALETTES["major"])
+        return ChordCreationPlan(
+            key=key,
+            scale=scale,
+            length_bars=prompt_mapping.get("length_bars", 8),
+            chord_quality_palette=list(palette),
+            scale_degree_weights=dict(self._DEGREE_WEIGHTS_MAJOR),
+            harmonic_rhythm_blueprint=[2.0] * 8,
+            tension_strategy="gradual",
+            voice_leading_rules=["smooth_voice_leading"],
+            target_emotions=list(emotions.keys()),
+            preferred_extensions=["maj7", "9"],
+            borrowed_chords_allowed=False,
+            modal_interchange_allowed=False,
         )
