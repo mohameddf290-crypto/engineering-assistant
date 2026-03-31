@@ -4,6 +4,7 @@ const playback = {
     chordData: null,
     melodyData: {},
     synths: {},
+    _chordSynth: null,
 
     setBPM(bpm) {
         this.bpm = parseInt(bpm);
@@ -17,6 +18,24 @@ const playback = {
     loadData(progression, melodies) {
         this.chordData = progression;
         this.melodyData = melodies || {};
+    },
+
+    _disposeAllSynths() {
+        if (this._chordSynth) {
+            try { this._chordSynth.dispose(); } catch (e) { /* ignore */ }
+            this._chordSynth = null;
+        }
+        Object.values(this.synths).forEach(s => {
+            try { s.dispose(); } catch (e) { /* ignore */ }
+        });
+        this.synths = {};
+    },
+
+    async _ensureAudioReady() {
+        await Tone.start();
+        if (Tone.context.state !== 'running') {
+            await Tone.context.resume();
+        }
     },
 
     getSynth(role) {
@@ -53,26 +72,29 @@ const playback = {
     },
 
     async playChordsOnly() {
-        if (!this.chordData) return;
-        await Tone.start();
-        Tone.getTransport().stop();
-        Tone.getTransport().cancel();
+        if (!this.chordData || !this.chordData.length) return;
+
+        this.stop();
+        await this._ensureAudioReady();
 
         Tone.getTransport().bpm.value = this.bpm;
-        const chordSynth = new Tone.PolySynth(Tone.Synth, {
+
+        this._chordSynth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: 'triangle' },
             envelope: { attack: 0.1, decay: 0.2, sustain: 0.7, release: 0.8 }
         }).toDestination();
-        chordSynth.volume.value = -12;
+        this._chordSynth.volume.value = -12;
 
         const secPerBeat = 60 / this.bpm;
-        let t = 0;
+        let t = 0.05;
         this.chordData.forEach(chord => {
             const notes = (chord.midi_notes || []).map(m => this.midiToNote(m));
             const dur = (chord.duration_beats || 4) * secPerBeat;
-            Tone.getTransport().schedule(time => {
-                chordSynth.triggerAttackRelease(notes, dur - 0.1, time);
-            }, t);
+            if (notes.length > 0) {
+                Tone.getTransport().schedule(time => {
+                    this._chordSynth.triggerAttackRelease(notes, Math.max(0.1, dur - 0.1), time);
+                }, t);
+            }
             t += (chord.duration_beats || 4) * secPerBeat;
         });
 
@@ -80,39 +102,44 @@ const playback = {
         this.isPlaying = true;
         const btn = document.getElementById('play-btn');
         if (btn) btn.textContent = '⏸ Pause';
+        const chordBtn = document.getElementById('chord-play-btn');
+        if (chordBtn) chordBtn.textContent = '⏸ Pause';
     },
 
     async playAll() {
-        if (!this.chordData) return;
-        await Tone.start();
-        Tone.getTransport().stop();
-        Tone.getTransport().cancel();
+        if (!this.chordData || !this.chordData.length) return;
+
+        this.stop();
+        await this._ensureAudioReady();
+
         Tone.getTransport().bpm.value = this.bpm;
 
-        // Play chords
-        const chordSynth = new Tone.PolySynth(Tone.Synth, {
+        // Chord synth
+        this._chordSynth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: 'triangle' },
             envelope: { attack: 0.1, decay: 0.2, sustain: 0.7, release: 0.8 }
         }).toDestination();
-        chordSynth.volume.value = -12;
+        this._chordSynth.volume.value = -12;
 
         const secPerBeat = 60 / this.bpm;
-        let t = 0;
+        let t = 0.05;
         this.chordData.forEach(chord => {
             const notes = (chord.midi_notes || []).map(m => this.midiToNote(m));
             const dur = (chord.duration_beats || 4) * secPerBeat;
-            Tone.getTransport().schedule(time => {
-                chordSynth.triggerAttackRelease(notes, dur - 0.1, time);
-            }, t);
+            if (notes.length > 0) {
+                Tone.getTransport().schedule(time => {
+                    this._chordSynth.triggerAttackRelease(notes, Math.max(0.1, dur - 0.1), time);
+                }, t);
+            }
             t += (chord.duration_beats || 4) * secPerBeat;
         });
 
-        // Play melodies
+        // Melody synths
         Object.entries(this.melodyData).forEach(([role, notes]) => {
             if (!notes || !notes.length) return;
             const synth = this.getSynth(role);
             notes.forEach(note => {
-                const noteTime = note.position_beats * secPerBeat;
+                const noteTime = 0.05 + note.position_beats * secPerBeat;
                 const dur = note.duration_beats * secPerBeat - 0.05;
                 const noteName = this.midiToNote(note.pitch_midi);
                 Tone.getTransport().schedule(time => {
@@ -129,6 +156,8 @@ const playback = {
         this.isPlaying = true;
         const btn = document.getElementById('play-btn');
         if (btn) btn.textContent = '⏸ Pause';
+        const chordBtn = document.getElementById('chord-play-btn');
+        if (chordBtn) chordBtn.textContent = '⏸ Pause';
     },
 
     async togglePlay() {
@@ -144,8 +173,11 @@ const playback = {
             Tone.getTransport().stop();
             Tone.getTransport().cancel();
         }
+        this._disposeAllSynths();
         this.isPlaying = false;
         const btn = document.getElementById('play-btn');
         if (btn) btn.textContent = '▶ Play';
+        const chordBtn = document.getElementById('chord-play-btn');
+        if (chordBtn) chordBtn.textContent = '▶ Play Chords';
     }
 };
