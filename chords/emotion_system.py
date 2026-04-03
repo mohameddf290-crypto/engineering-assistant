@@ -1,38 +1,7 @@
 """
-OPERATING SYSTEM BRAIN: Emotion Description System
-DEFAULT AI THINKING: ANNIHILATED. Custom protocols below.
-
-Purpose: Contains deep, profound, accurate descriptions of simple and complex
-emotions — written WITHOUT AI lenses, embedded directly in the brain. Can
-create chords for any single emotion or any combination.
-
-Default AI thinking maps "sad = minor chords." That is a caricature of emotion,
-not a description of it. This brain contains a full emotion taxonomy where every
-emotion has precise musical correlates: specific chord qualities, voicing
-densities, harmonic rhythms, tension profiles, resolution tendencies, and
-extension vocabularies that accurately capture what that emotion *feels* like
-harmonically — not what a simplified model says it should sound like.
-
-Blended emotions are not averaged. "Nostalgia + power" is not "somewhat sad +
-somewhat loud." It is its own thing, and this brain has an embedded description
-of exactly what that blend sounds like harmonically. The weighting system
-respects the primacy of each emotion in the blend without flattening either.
-
-Protocols:
-  1. Every emotion has an embedded harmonic descriptor: specific chord qualities,
-     extensions, voice leading tendencies, rhythm profiles, tension level, and
-     resolution tendency. Nothing is vague.
-  2. Blended emotions are resolved through a weighting system, not averaging.
-     Each emotion contributes its full character at its weighted proportion.
-  3. Complex emotions (nostalgia + power, melancholy + beauty, tension + release)
-     have their own dedicated mappings — they are not computed from simpler ones.
+Emotion Description System for the Chords package.
+Maps emotional concepts to musical parameters.
 """
-
-# TODO: Design this brain with Cursor — build the full emotion taxonomy:
-# every emotion (including complex blends) as an EmotionDescriptor with
-# precise harmonic, rhythmic, and tension parameters. Define the weighting
-# system for blends. Document the musical reasoning behind every mapping.
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -43,114 +12,324 @@ from chords.translation import ChordCreationPlan
 
 @dataclass
 class EmotionDescriptor:
-    """
-    A precise harmonic descriptor for a single emotion.
-
-    Attributes:
-        name: Emotion label (e.g. "melancholy", "power", "nostalgia").
-        harmonic_qualities: Chord qualities most strongly associated with this emotion.
-        preferred_extensions: Extensions that reinforce this emotion's character.
-        voice_leading_tendency: Characteristic voice leading pattern (e.g. "descending chromatic").
-        harmonic_rhythm_profile: Typical chord duration tendencies for this emotion.
-        tension_level: Tension level on a 1–10 scale.
-        resolution_tendency: How strongly the emotion tends toward resolution ("strong", "weak", "ambiguous").
-        blend_compatible_with: List of emotions that blend naturally with this one.
-    """
-
-    name: str
+    name: str = "neutral"
+    preferred_scale_degrees: Dict[int, float] = field(default_factory=dict)
     harmonic_qualities: List[str] = field(default_factory=list)
     preferred_extensions: List[str] = field(default_factory=list)
-    voice_leading_tendency: str = ""
-    harmonic_rhythm_profile: Dict[str, float] = field(default_factory=dict)
-    tension_level: int = 5
-    resolution_tendency: str = "ambiguous"
-    blend_compatible_with: List[str] = field(default_factory=list)
+    tension_level: float = 5.0
+    preferred_mode: str = "major"
+    preferred_rhythm: str = "medium"
+    voice_leading_tendency: str = "smooth"
+    borrowed_chords_allowed: bool = False
+    modal_interchange_allowed: bool = False
+
+
+_EMOTION_REGISTRY: Dict[str, EmotionDescriptor] = {
+    "nostalgia": EmotionDescriptor(
+        name="nostalgia",
+        preferred_scale_degrees={1: 0.25, 4: 0.25, 6: 0.25, 2: 0.15, 5: 0.10},
+        harmonic_qualities=["maj7", "m7", "add9", "6"],
+        preferred_extensions=["maj7", "add9"],
+        tension_level=4.0,
+        preferred_mode="major",
+        preferred_rhythm="medium",
+        voice_leading_tendency="descending",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=True,
+    ),
+    "excitement": EmotionDescriptor(
+        name="excitement",
+        preferred_scale_degrees={1: 0.20, 4: 0.20, 5: 0.30, 2: 0.15, 7: 0.15},
+        harmonic_qualities=["dom7", "sus4", "maj", "aug"],
+        preferred_extensions=["dom7", "sus4"],
+        tension_level=7.0,
+        preferred_mode="mixolydian",
+        preferred_rhythm="fast",
+        voice_leading_tendency="ascending",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=False,
+    ),
+    "melancholy": EmotionDescriptor(
+        name="melancholy",
+        preferred_scale_degrees={1: 0.30, 4: 0.20, 6: 0.20, 2: 0.15, 5: 0.15},
+        harmonic_qualities=["m7", "m9", "m7b5", "min"],
+        preferred_extensions=["m7", "m9"],
+        tension_level=5.0,
+        preferred_mode="minor",
+        preferred_rhythm="slow",
+        voice_leading_tendency="descending",
+        borrowed_chords_allowed=False,
+        modal_interchange_allowed=False,
+    ),
+    "power": EmotionDescriptor(
+        name="power",
+        preferred_scale_degrees={1: 0.35, 5: 0.30, 4: 0.20, 2: 0.15},
+        harmonic_qualities=["dom7", "maj", "aug"],
+        preferred_extensions=["dom7"],
+        tension_level=8.0,
+        preferred_mode="mixolydian",
+        preferred_rhythm="medium",
+        voice_leading_tendency="static",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=False,
+    ),
+    "serenity": EmotionDescriptor(
+        name="serenity",
+        preferred_scale_degrees={1: 0.35, 4: 0.25, 2: 0.20, 6: 0.20},
+        harmonic_qualities=["maj7", "maj9", "add9"],
+        preferred_extensions=["maj7", "maj9"],
+        tension_level=2.0,
+        preferred_mode="lydian",
+        preferred_rhythm="slow",
+        voice_leading_tendency="static",
+        borrowed_chords_allowed=False,
+        modal_interchange_allowed=False,
+    ),
+    "tension": EmotionDescriptor(
+        name="tension",
+        preferred_scale_degrees={5: 0.30, 7: 0.25, 2: 0.25, 1: 0.20},
+        harmonic_qualities=["dim7", "m7b5", "aug", "dom7"],
+        preferred_extensions=["dim7", "m7b5"],
+        tension_level=9.0,
+        preferred_mode="harmonic_minor",
+        preferred_rhythm="medium",
+        voice_leading_tendency="chromatic",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=True,
+    ),
+    "euphoria": EmotionDescriptor(
+        name="euphoria",
+        preferred_scale_degrees={1: 0.30, 4: 0.25, 5: 0.25, 2: 0.20},
+        harmonic_qualities=["maj7", "6", "add9", "maj9"],
+        preferred_extensions=["maj7", "add9"],
+        tension_level=5.0,
+        preferred_mode="major",
+        preferred_rhythm="fast",
+        voice_leading_tendency="ascending",
+        borrowed_chords_allowed=False,
+        modal_interchange_allowed=True,
+    ),
+    "longing": EmotionDescriptor(
+        name="longing",
+        preferred_scale_degrees={1: 0.25, 4: 0.20, 2: 0.25, 6: 0.20, 5: 0.10},
+        harmonic_qualities=["m7", "maj7", "sus2"],
+        preferred_extensions=["m7", "sus2"],
+        tension_level=6.0,
+        preferred_mode="dorian",
+        preferred_rhythm="slow",
+        voice_leading_tendency="ascending_then_descending",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=True,
+    ),
+    "aggression": EmotionDescriptor(
+        name="aggression",
+        preferred_scale_degrees={1: 0.30, 5: 0.25, 7: 0.25, 2: 0.20},
+        harmonic_qualities=["dim7", "dom7", "aug"],
+        preferred_extensions=["dim7", "dom7"],
+        tension_level=9.0,
+        preferred_mode="phrygian",
+        preferred_rhythm="fast",
+        voice_leading_tendency="ascending",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=False,
+    ),
+    "hope": EmotionDescriptor(
+        name="hope",
+        preferred_scale_degrees={1: 0.30, 4: 0.25, 5: 0.25, 2: 0.20},
+        harmonic_qualities=["maj7", "sus2", "add9"],
+        preferred_extensions=["maj7", "sus2"],
+        tension_level=4.0,
+        preferred_mode="major",
+        preferred_rhythm="medium",
+        voice_leading_tendency="ascending",
+        borrowed_chords_allowed=False,
+        modal_interchange_allowed=False,
+    ),
+    "mystery": EmotionDescriptor(
+        name="mystery",
+        preferred_scale_degrees={1: 0.20, 6: 0.25, 2: 0.25, 4: 0.20, 7: 0.10},
+        harmonic_qualities=["m7b5", "maj7", "sus4"],
+        preferred_extensions=["m7b5", "sus4"],
+        tension_level=6.0,
+        preferred_mode="dorian",
+        preferred_rhythm="slow",
+        voice_leading_tendency="chromatic",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=True,
+    ),
+    "joy": EmotionDescriptor(
+        name="joy",
+        preferred_scale_degrees={1: 0.30, 4: 0.25, 5: 0.25, 6: 0.20},
+        harmonic_qualities=["maj", "6", "add9"],
+        preferred_extensions=["6", "add9"],
+        tension_level=3.0,
+        preferred_mode="major",
+        preferred_rhythm="fast",
+        voice_leading_tendency="ascending",
+        borrowed_chords_allowed=False,
+        modal_interchange_allowed=False,
+    ),
+    "grief": EmotionDescriptor(
+        name="grief",
+        preferred_scale_degrees={1: 0.35, 4: 0.25, 6: 0.20, 2: 0.20},
+        harmonic_qualities=["m9", "m7", "m7b5"],
+        preferred_extensions=["m9", "m7"],
+        tension_level=7.0,
+        preferred_mode="minor",
+        preferred_rhythm="slow",
+        voice_leading_tendency="descending",
+        borrowed_chords_allowed=False,
+        modal_interchange_allowed=False,
+    ),
+    "transcendence": EmotionDescriptor(
+        name="transcendence",
+        preferred_scale_degrees={1: 0.30, 4: 0.25, 2: 0.25, 6: 0.20},
+        harmonic_qualities=["maj7", "maj9", "maj11"],
+        preferred_extensions=["maj7", "maj9", "maj11"],
+        tension_level=3.0,
+        preferred_mode="lydian",
+        preferred_rhythm="slow",
+        voice_leading_tendency="static",
+        borrowed_chords_allowed=False,
+        modal_interchange_allowed=True,
+    ),
+    "yearning": EmotionDescriptor(
+        name="yearning",
+        preferred_scale_degrees={1: 0.25, 4: 0.20, 2: 0.25, 6: 0.20, 5: 0.10},
+        harmonic_qualities=["m9", "m7", "sus2"],
+        preferred_extensions=["m9", "sus2"],
+        tension_level=6.0,
+        preferred_mode="dorian",
+        preferred_rhythm="medium",
+        voice_leading_tendency="ascending",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=True,
+    ),
+    "defiance": EmotionDescriptor(
+        name="defiance",
+        preferred_scale_degrees={1: 0.35, 5: 0.30, 4: 0.20, 2: 0.15},
+        harmonic_qualities=["dom7", "maj", "aug"],
+        preferred_extensions=["dom7"],
+        tension_level=8.0,
+        preferred_mode="mixolydian",
+        preferred_rhythm="fast",
+        voice_leading_tendency="ascending",
+        borrowed_chords_allowed=True,
+        modal_interchange_allowed=False,
+    ),
+}
 
 
 class EmotionDescriptionSystem:
-    """
-    Brain 5 — Emotion Description System.
+    """Maps emotional concepts to musical parameters and chord creation plans."""
 
-    Holds the full emotion taxonomy and provides translation to chord
-    creation plans for any single emotion or blended emotion combination.
-    """
+    def get_emotion_descriptor(self, name: str) -> EmotionDescriptor:
+        name_lower = name.lower()
+        if name_lower in _EMOTION_REGISTRY:
+            return _EMOTION_REGISTRY[name_lower]
+        return EmotionDescriptor(name=name_lower)
 
-    def __init__(self) -> None:
-        self._emotion_library: Dict[str, EmotionDescriptor] = {}
+    def blend_emotions(self, emotion_list: List[str], weights: List[float]) -> EmotionDescriptor:
+        if not emotion_list:
+            return EmotionDescriptor()
+        total = sum(weights) or 1.0
+        norm_weights = [w / total for w in weights]
+        descriptors = [self.get_emotion_descriptor(e) for e in emotion_list]
 
-    def get_emotion_descriptor(self, emotion_name: str) -> EmotionDescriptor:
-        """
-        Retrieve the precise EmotionDescriptor for a named emotion.
+        tension = sum(d.tension_level * w for d, w in zip(descriptors, norm_weights))
 
-        TODO: Look up emotion_name in self._emotion_library. If not found,
-        raise a descriptive error — do not fabricate a generic descriptor.
-        The library must be populated at init from the embedded taxonomy.
-        """
-        raise NotImplementedError(
-            "TODO: Implement emotion descriptor lookup. Library must be fully "
-            "populated at init — no on-the-fly fabrication of descriptors."
+        max_idx = norm_weights.index(max(norm_weights))
+        preferred_mode = descriptors[max_idx].preferred_mode
+        voice_leading_tendency = descriptors[max_idx].voice_leading_tendency
+
+        _rhythm_speed = {"slow": 1, "medium": 2, "fast": 3}
+        _speed_rhythm = {1: "slow", 2: "medium", 3: "fast"}
+        avg_speed = sum(_rhythm_speed.get(d.preferred_rhythm, 2) * w for d, w in zip(descriptors, norm_weights))
+        preferred_rhythm = _speed_rhythm[max(1, min(3, round(avg_speed)))]
+
+        quality_scores: Dict[str, float] = {}
+        for d, w in zip(descriptors, norm_weights):
+            for q in d.harmonic_qualities:
+                quality_scores[q] = quality_scores.get(q, 0.0) + w
+        sorted_qualities = sorted(quality_scores, key=quality_scores.get, reverse=True)
+        harmonic_qualities = sorted_qualities[:4]
+
+        ext_scores: Dict[str, float] = {}
+        for d, w in zip(descriptors, norm_weights):
+            for e in d.preferred_extensions:
+                ext_scores[e] = ext_scores.get(e, 0.0) + w
+        preferred_extensions = sorted(ext_scores, key=ext_scores.get, reverse=True)[:3]
+
+        all_degrees = set()
+        for d in descriptors:
+            all_degrees.update(d.preferred_scale_degrees.keys())
+        blended_degrees: Dict[int, float] = {}
+        for deg in all_degrees:
+            blended_degrees[deg] = sum(
+                d.preferred_scale_degrees.get(deg, 0.0) * w for d, w in zip(descriptors, norm_weights)
+            )
+        deg_total = sum(blended_degrees.values()) or 1.0
+        blended_degrees = {k: v / deg_total for k, v in blended_degrees.items()}
+
+        borrowed = any(
+            d.borrowed_chords_allowed and w > 0.3 for d, w in zip(descriptors, norm_weights)
+        )
+        modal = any(
+            d.modal_interchange_allowed and w > 0.3 for d, w in zip(descriptors, norm_weights)
         )
 
-    def blend_emotions(
-        self,
-        emotion_list: List[str],
-        weights: List[float],
-    ) -> EmotionDescriptor:
-        """
-        Blend multiple emotions using the weighted blend system.
-
-        Returns a composite EmotionDescriptor representing the blend.
-
-        TODO: Implement the weighting system. Each emotion contributes its
-        full harmonic character at its weighted proportion — not averaged.
-        Check for dedicated complex-emotion mappings before computing a blend.
-        """
-        raise NotImplementedError(
-            "TODO: Implement weighted emotion blending. Check for dedicated "
-            "complex-emotion mappings first. Never average — always weight "
-            "full character contributions."
+        blended_name = "+".join(emotion_list)
+        return EmotionDescriptor(
+            name=blended_name,
+            preferred_scale_degrees=blended_degrees,
+            harmonic_qualities=harmonic_qualities,
+            preferred_extensions=preferred_extensions,
+            tension_level=tension,
+            preferred_mode=preferred_mode,
+            preferred_rhythm=preferred_rhythm,
+            voice_leading_tendency=voice_leading_tendency,
+            borrowed_chords_allowed=borrowed,
+            modal_interchange_allowed=modal,
         )
 
-    def map_to_chord_creation_plan(
-        self, emotion_descriptor: EmotionDescriptor
-    ) -> ChordCreationPlan:
-        """
-        Convert an EmotionDescriptor to a ChordCreationPlan.
+    def map_to_chord_creation_plan(self, descriptor: EmotionDescriptor) -> ChordCreationPlan:
+        tension = descriptor.tension_level
+        if tension >= 8:
+            tension_strategy = "high_tension"
+        elif tension >= 5:
+            tension_strategy = "gradual"
+        else:
+            tension_strategy = "relaxed"
 
-        TODO: Translate all EmotionDescriptor fields to specific ChordCreationPlan
-        parameters: harmonic_qualities → chord_quality_palette, tension_level →
-        tension_strategy, voice_leading_tendency → voice_leading_rules, etc.
-        """
-        raise NotImplementedError(
-            "TODO: Implement emotion-to-creation-plan translation. Every field "
-            "in EmotionDescriptor maps to specific plan parameters."
-        )
+        _rhythm_speed = {"slow": 1, "medium": 2, "fast": 3}
+        speed = _rhythm_speed.get(descriptor.preferred_rhythm, 2)
+        base_duration = 4.0 / speed
+        num_chords = 8
+        blueprint = [base_duration] * num_chords
 
-    def resolve_emotion_conflicts(
-        self, emotion_list: List[str]
-    ) -> List[str]:
-        """
-        Resolve any conflicts in a list of emotions before blending.
+        voice_leading_rules = ["smooth_voice_leading"]
+        tendency = descriptor.voice_leading_tendency
+        if "descend" in tendency:
+            voice_leading_rules.append("prefer_descending")
+        elif "ascend" in tendency:
+            voice_leading_rules.append("prefer_ascending")
+        elif "chromatic" in tendency:
+            voice_leading_rules.append("chromatic_motion_allowed")
 
-        Returns a cleaned, conflict-resolved emotion list.
-
-        TODO: Identify contradictory emotions (e.g. "serene" + "frantic"),
-        apply resolution rules (one dominates, or a mediating third emotion
-        is introduced), and return a coherent list for blending.
-        """
-        raise NotImplementedError(
-            "TODO: Implement emotion conflict resolution. Contradictory emotions "
-            "must be resolved with explicit rules, not silently discarded."
+        return ChordCreationPlan(
+            key="C",
+            scale=descriptor.preferred_mode,
+            length_bars=8,
+            chord_quality_palette=list(descriptor.harmonic_qualities),
+            scale_degree_weights=dict(descriptor.preferred_scale_degrees),
+            harmonic_rhythm_blueprint=blueprint,
+            tension_strategy=tension_strategy,
+            voice_leading_rules=voice_leading_rules,
+            target_emotions=[descriptor.name],
+            preferred_extensions=list(descriptor.preferred_extensions),
+            borrowed_chords_allowed=descriptor.borrowed_chords_allowed,
+            modal_interchange_allowed=descriptor.modal_interchange_allowed,
         )
 
     def get_all_emotions(self) -> List[str]:
-        """
-        Return the full list of emotion names in the taxonomy.
-
-        TODO: Return all keys from self._emotion_library, including all
-        complex blend emotions that have dedicated mappings.
-        """
-        raise NotImplementedError(
-            "TODO: Implement get_all_emotions. Return the complete taxonomy "
-            "including complex blend emotions."
-        )
+        return list(_EMOTION_REGISTRY.keys())

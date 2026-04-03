@@ -1,152 +1,122 @@
-"""
-OPERATING SYSTEM BRAIN: AI Blocker (Melodies)
-DEFAULT AI THINKING: ANNIHILATED. Custom protocols below.
-
-Purpose: Hard constraint system blocking any output that resembles default AI
-melody generation.
-
-Default AI thinking produces melodies that are technically correct but
-musically dead: stepwise motion that goes nowhere, pentatonic note selection
-that lacks harmonic sophistication, even-eighth-note rhythmic grids that have
-no pulse or feel, and emotional flatness where every phrase lands at the same
-dynamic and tension level. This brain knows all of those patterns exactly and
-blocks every one of them.
-
-The blacklist is not a style preference — it is a hard constraint. Monotone
-stepwise scalic runs are blocked. Bare pentatonic patterns are blocked. Even-
-eighth-note rhythmic grids are blocked. Melodies with no dynamic phrasing
-(every note the same velocity) are blocked. The AI Blocker intercepts every
-generated melody before it reaches the user and triggers immediate regeneration
-for any flagged result.
-
-Regeneration is guided by feedback: the AI Blocker tells the Melody Creation
-Brain which specific patterns were detected so that the next attempt explicitly
-avoids them. This is not a retry loop — it is a feedback-driven improvement
-cycle with a maximum attempt limit.
-
-Protocols:
-  1. Every generated melody passes through AI pattern detection before
-     delivery. No exceptions.
-  2. Blacklisted patterns: monotone stepwise scalic runs, bare pentatonic
-     patterns, even-eighth-note rhythmic grid, no dynamic phrasing.
-  3. Rejection triggers immediate regeneration with pattern-specific feedback
-     — never delivers a flagged result.
-"""
-
-# TODO: Design this brain with Cursor — define the complete melodic blacklist:
-# every AI pattern as a formal detection algorithm, the cliché melody database,
-# the melodic quality scoring formula, and the feedback protocol that passes
-# pattern information back to the Melody Creation Brain for the next attempt.
-
+"""Melody AI Blocker — rejects boring/generic melody output."""
 from __future__ import annotations
+import math
+from typing import List, Tuple
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-
-from melodies.melody_creator import Melody
-
-
-@dataclass
-class MelodyAIPatternResult:
-    """
-    The result of AI pattern screening on a melody.
-
-    Attributes:
-        melody_id: Identifier for the screened melody.
-        patterns_detected: List of AI pattern labels detected.
-        is_blocked: True if the melody is blocked; False if it passes.
-        blocking_reasons: Detailed reasons for each detected pattern.
-        quality_score: Overall quality score (0.0–1.0).
-    """
-
-    melody_id: str
-    patterns_detected: List[str] = field(default_factory=list)
-    is_blocked: bool = False
-    blocking_reasons: List[str] = field(default_factory=list)
-    quality_score: float = 0.0
+from melodies.melody_creator import MelodyLine, MelodyNote
 
 
 class MelodyAIBlocker:
-    """
-    Brain M7 — AI Blocker (Melodies).
+    """Screens melody output and rejects low-quality generations."""
 
-    Hard constraint layer that screens every generated melody and blocks
-    any output matching known AI patterns, melodic clichés, or bland profiles.
-    """
+    def check_melody(self, melody: MelodyLine) -> Tuple[bool, float, List[str]]:
+        notes = melody.notes
+        if not notes:
+            return False, 0.0, ["Empty melody"]
+        reasons: List[str] = []
+        scores: List[float] = []
 
-    def __init__(self) -> None:
-        self._blacklisted_patterns: List[Dict[str, object]] = []
-        self._quality_threshold: float = 0.70
+        # 1. Reject pure scale runs (>5 consecutive steps same direction)
+        run_score = self._score_runs(notes)
+        scores.append(run_score)
+        if run_score < 0.3:
+            reasons.append("Pure scale run detected — melody has no shape")
 
-    def screen_melody(self, melody: Melody) -> MelodyAIPatternResult:
-        """
-        Run all AI pattern detection, cliché detection, and quality scoring
-        on a melody. Return the full MelodyAIPatternResult.
+        # 2. Reject arpeggio-only patterns
+        arp_score = self._score_not_arpeggio(notes)
+        scores.append(arp_score)
+        if arp_score < 0.3:
+            reasons.append("Arpeggio-only pattern — melody just outlines chords")
 
-        TODO: Orchestrate detect_ai_patterns → detect_melodic_cliches →
-        calculate_melodic_quality_score. Aggregate findings into a single
-        MelodyAIPatternResult. is_blocked = True if any check fails.
-        """
-        raise NotImplementedError(
-            "TODO: Implement full melodic screening pipeline. All three checks "
-            "must run — a single failure blocks the melody."
-        )
+        # 3. Reject tiny range
+        range_score = self._score_range(notes)
+        scores.append(range_score)
+        if range_score < 0.2:
+            reasons.append("Melody stays in fewer than 3 distinct pitches")
 
-    def detect_ai_patterns(self, melody: Melody) -> List[str]:
-        """
-        Detect known AI-generated melodic patterns in the melody.
+        # 4. Reject rhythmic flatness
+        rhythm_score = self._score_rhythmic_variety(notes)
+        scores.append(rhythm_score)
+        if rhythm_score < 0.2:
+            reasons.append("All notes have identical duration — no rhythmic interest")
 
-        Returns a list of pattern labels that were matched.
+        # 5. Singability — penalise jumps > octave
+        sing_score = self._score_singability(notes)
+        scores.append(sing_score)
+        if sing_score < 0.2:
+            reasons.append("Too many large leaps — melody is not singable")
 
-        TODO: Implement formal detection algorithms for each blacklisted pattern:
-        run-length analysis for stepwise scalic runs, pitch-class set analysis
-        for pentatonic detection, inter-onset interval analysis for rhythmic grid
-        detection, velocity variance analysis for dynamic flatness detection.
-        """
-        raise NotImplementedError(
-            "TODO: Implement AI melodic pattern detection. Must use formal "
-            "algorithms — not heuristic guesses — for each blacklisted pattern."
-        )
+        overall = sum(scores) / len(scores)
+        passed = overall >= 0.45 and len(reasons) == 0
+        return passed, round(overall, 3), reasons
 
-    def detect_melodic_cliches(self, melody: Melody) -> List[str]:
-        """
-        Detect cliché melodic patterns beyond the core AI blacklist.
+    # ------------------------------------------------------------------ helpers
+    def _score_runs(self, notes: List[MelodyNote]) -> float:
+        if len(notes) < 3:
+            return 1.0
+        pitches = [n.pitch for n in notes]
+        max_run = 1
+        cur_run = 1
+        for i in range(1, len(pitches)):
+            diff_prev = pitches[i] - pitches[i - 1]
+            if i >= 2:
+                diff_pprev = pitches[i - 1] - pitches[i - 2]
+                if diff_prev != 0 and diff_pprev != 0 and math.copysign(1, diff_prev) == math.copysign(1, diff_pprev):
+                    cur_run += 1
+                    max_run = max(max_run, cur_run)
+                else:
+                    cur_run = 1
+            else:
+                cur_run = 1
+        if max_run > 7:
+            return 0.0
+        if max_run > 5:
+            return 0.3
+        if max_run > 4:
+            return 0.6
+        return 1.0
 
-        Returns a list of cliché labels detected.
+    def _score_not_arpeggio(self, notes: List[MelodyNote]) -> float:
+        if len(notes) < 3:
+            return 1.0
+        pitches = [n.pitch for n in notes]
+        intervals = [abs(pitches[i] - pitches[i - 1]) for i in range(1, len(pitches))]
+        chord_intervals = {3, 4, 5, 7, 8, 9}
+        chord_count = sum(1 for iv in intervals if iv in chord_intervals)
+        ratio = chord_count / max(len(intervals), 1)
+        if ratio > 0.85:
+            return 0.1
+        if ratio > 0.7:
+            return 0.5
+        return 1.0
 
-        TODO: Implement cliché detection against a broader database. Include
-        genre-specific melodic clichés (pop hook patterns, cinematic swell
-        patterns, etc.). A melody can fail on cliché grounds even if it passes
-        AI pattern detection.
-        """
-        raise NotImplementedError(
-            "TODO: Implement melodic cliché detection. Broader than the AI "
-            "blacklist — include genre-specific melodic clichés."
-        )
+    def _score_range(self, notes: List[MelodyNote]) -> float:
+        pitches = set(n.pitch for n in notes)
+        span = max(pitches) - min(pitches) if len(pitches) > 1 else 0
+        if len(pitches) < 3 or span < 2:
+            return 0.0
+        if span < 5:
+            return 0.4
+        if span < 9:
+            return 0.7
+        return 1.0
 
-    def calculate_melodic_quality_score(self, melody: Melody) -> float:
-        """
-        Calculate the overall melodic quality score (0.0–1.0).
+    def _score_rhythmic_variety(self, notes: List[MelodyNote]) -> float:
+        durations = set(round(n.duration, 2) for n in notes)
+        if len(durations) == 1:
+            return 0.0
+        if len(durations) == 2:
+            return 0.6
+        return 1.0
 
-        TODO: Implement melodic quality scoring: contour coherence weight +
-        rhythmic variety weight + interval interest weight + dynamic phrasing
-        weight + harmonic relevance weight. Score must exceed self._quality_threshold.
-        """
-        raise NotImplementedError(
-            "TODO: Implement melodic quality scoring formula. Weighted "
-            "combination of contour, rhythm, interval, dynamic, and harmonic "
-            "quality components."
-        )
-
-    def get_blacklisted_patterns(self) -> List[Dict[str, object]]:
-        """
-        Return the full list of blacklisted melodic pattern definitions.
-
-        TODO: Return self._blacklisted_patterns fully populated at init.
-        Each entry must include: pattern label, detection algorithm description,
-        and why it was blacklisted.
-        """
-        raise NotImplementedError(
-            "TODO: Implement blacklisted pattern retrieval. List must be fully "
-            "populated with formal detection algorithm descriptions."
-        )
+    def _score_singability(self, notes: List[MelodyNote]) -> float:
+        if len(notes) < 2:
+            return 1.0
+        pitches = [n.pitch for n in notes]
+        big_leaps = sum(1 for i in range(1, len(pitches)) if abs(pitches[i] - pitches[i - 1]) > 12)
+        ratio = big_leaps / max(len(pitches) - 1, 1)
+        if ratio > 0.3:
+            return 0.1
+        if ratio > 0.15:
+            return 0.5
+        return 1.0

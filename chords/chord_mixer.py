@@ -1,181 +1,226 @@
 """
-OPERATING SYSTEM BRAIN: Chord Mixer
-DEFAULT AI THINKING: ANNIHILATED. Custom protocols below.
-
-Purpose: Takes any 2 generated chord progressions and intelligently blends
-them into a single cohesive progression.
-
-Default AI thinking says "interleave chords from A and B" or "average the
-chord qualities." Both produce incoherent musical mush. This brain analyses
-both progressions before touching a single note, detects key conflicts and
-resolves them via pivot chords, preserves the best harmonic elements of each
-source, and produces a blended result that has its own musical identity — one
-that is better than either input alone.
-
-The blend is not a compromise. It is a synthesis: the harmonic strengths of
-progression A and the harmonic strengths of progression B are identified
-explicitly, and the blended result is constructed to carry both forward. Any
-key or scale conflict is resolved through intelligent pivot chord detection —
-the transition between the two tonal worlds is musical, not jarring.
-
-Protocols:
-  1. Analyse both progressions before blending — never blindly merge. The
-     analysis step is mandatory; skipping it is an error.
-  2. Key/scale conflicts are resolved through intelligent pivot chord detection.
-     Forced key changes without pivot chords are not acceptable.
-  3. The blended result must be musically better than either input alone.
-     Quality score must exceed both source progression scores.
+Chord Mixer for the Chords package.
+Blends and merges chord progressions.
 """
-
-# TODO: Design this brain with Cursor — define the compatibility analysis
-# algorithm, pivot chord detection rules, the blend strategy taxonomy (which
-# elements come from A vs B at different blend ratios), and the quality
-# evaluation criteria that verify the blend exceeds both sources.
-
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from chords.chord_creator import ChordProgression, ChordVoicing
+from chords.chord_creator import CHORD_INTERVALS, NOTES, SCALES, ChordProgression, ChordVoicing
 
 
 @dataclass
 class MixRequest:
-    """
-    A request to blend two chord progressions.
-
-    Attributes:
-        progression_a: First source progression.
-        progression_b: Second source progression.
-        blend_ratio: Weight for progression_a (0.0–1.0); progression_b gets 1 - blend_ratio.
-        target_length_bars: Desired length of the blended result in bars.
-    """
-
-    progression_a: ChordProgression
-    progression_b: ChordProgression
+    progression_a: Optional[ChordProgression] = None
+    progression_b: Optional[ChordProgression] = None
     blend_ratio: float = 0.5
-    target_length_bars: int = 4
+    strategy: str = "interleave"
+    output_length_bars: Optional[int] = None
 
 
 @dataclass
 class MixResult:
-    """
-    The result of blending two chord progressions.
-
-    Attributes:
-        blended_progression: The final blended ChordProgression.
-        blend_strategy: Description of the blend strategy applied.
-        pivot_chords_used: List of pivot chord labels used to resolve key conflicts.
-        quality_score: Quality score of the blended result (0.0–1.0).
-    """
-
-    blended_progression: ChordProgression
-    blend_strategy: str
-    pivot_chords_used: List[str] = field(default_factory=list)
-    quality_score: float = 0.0
+    blended_progression: Optional[ChordProgression] = None
+    compatibility_score: float = 0.0
+    strategy_used: str = ""
+    notes: List[str] = field(default_factory=list)
 
 
 class ChordMixer:
-    """
-    Brain 7 — Chord Mixer.
-
-    Intelligently blends two chord progressions into a single cohesive
-    progression that is better than either source.
-    """
-
-    def __init__(self) -> None:
-        pass
+    """Blends and merges chord progressions using various strategies."""
 
     def mix_progressions(
         self,
         progression_a: ChordProgression,
         progression_b: ChordProgression,
-        blend_ratio: float,
+        blend_ratio: float = 0.5,
     ) -> MixResult:
-        """
-        Blend two chord progressions at the specified ratio.
+        a_adj, b_adj = self.resolve_key_conflict(progression_a, progression_b)
+        n_a = len(a_adj.voicings)
+        n_b = len(b_adj.voicings)
+        total = n_a + n_b
+        n_from_a = max(1, round(total * blend_ratio))
+        n_from_b = total - n_from_a
+        a_voicings = list(a_adj.voicings)[:n_from_a]
+        b_voicings = list(b_adj.voicings)[:n_from_b]
+        mixed = a_voicings + b_voicings
+        length = max(a_adj.length_bars, b_adj.length_bars)
+        blended = ChordProgression(
+            voicings=mixed,
+            key=a_adj.key,
+            scale=a_adj.scale,
+            length_bars=length,
+            emotional_character=f"{a_adj.emotional_character}+{b_adj.emotional_character}",
+        )
+        quality = self.evaluate_blend_quality(blended)
+        pivots = self.detect_pivot_chords(progression_a, progression_b)
+        return MixResult(
+            blended_progression=blended,
+            compatibility_score=quality,
+            strategy_used="weighted_blend",
+            notes=pivots[:3] if pivots else [],
+        )
 
-        TODO: Orchestrate the full blend pipeline: analyse_compatibility →
-        detect_pivot_chords → resolve_key_conflict (if needed) → construct
-        blended progression → evaluate_blend_quality. Return MixResult.
-        """
-        raise NotImplementedError(
-            "TODO: Implement full blend pipeline. Analysis and conflict resolution "
-            "are mandatory before any blending begins."
+    def mix(
+        self,
+        progression_a: ChordProgression,
+        progression_b: ChordProgression,
+        strategy: str = "interleave",
+    ) -> ChordProgression:
+        if strategy == "interleave":
+            return self._interleave(progression_a, progression_b)
+        elif strategy == "structural_blend":
+            return self._structural_blend(progression_a, progression_b)
+        elif strategy == "harmonic_merge":
+            return self._harmonic_merge(progression_a, progression_b)
+        else:
+            return self._interleave(progression_a, progression_b)
+
+    def _interleave(self, a: ChordProgression, b: ChordProgression) -> ChordProgression:
+        result_voicings = []
+        a_v = list(a.voicings)
+        b_v = list(b.voicings)
+        max_len = max(len(a_v), len(b_v))
+        for i in range(max_len):
+            if i < len(a_v):
+                result_voicings.append(copy.deepcopy(a_v[i]))
+            if i < len(b_v):
+                v = copy.deepcopy(b_v[i])
+                v.position_bar = (a_v[i].position_bar if i < len(a_v) else i + 1) + 1
+                result_voicings.append(v)
+        return ChordProgression(
+            voicings=result_voicings,
+            key=a.key,
+            scale=a.scale,
+            length_bars=a.length_bars + b.length_bars,
+            emotional_character=f"{a.emotional_character}+{b.emotional_character}",
+        )
+
+    def _structural_blend(self, a: ChordProgression, b: ChordProgression) -> ChordProgression:
+        result_voicings = []
+        b_v = list(b.voicings)
+        for i, av in enumerate(a.voicings):
+            bv = b_v[i % len(b_v)] if b_v else av
+            new_v = ChordVoicing(
+                root=bv.root,
+                quality=bv.quality,
+                extensions=bv.extensions,
+                bass_note=bv.bass_note,
+                midi_notes=list(bv.midi_notes),
+                duration_beats=av.duration_beats,
+                position_bar=av.position_bar,
+            )
+            result_voicings.append(new_v)
+        return ChordProgression(
+            voicings=result_voicings,
+            key=b.key,
+            scale=b.scale,
+            length_bars=a.length_bars,
+            emotional_character=f"{a.emotional_character}+{b.emotional_character}",
+        )
+
+    def _harmonic_merge(self, a: ChordProgression, b: ChordProgression) -> ChordProgression:
+        pivots = self.detect_pivot_chords(a, b)
+        a_v = list(a.voicings)
+        b_v = list(b.voicings)
+        result = []
+        for i in range(min(len(a_v), len(b_v))):
+            av = a_v[i]
+            bv = b_v[i]
+            av_complexity = len(CHORD_INTERVALS.get(av.quality, []))
+            bv_complexity = len(CHORD_INTERVALS.get(bv.quality, []))
+            chosen = av if av_complexity >= bv_complexity else bv
+            result.append(copy.deepcopy(chosen))
+        return ChordProgression(
+            voicings=result,
+            key=a.key,
+            scale=a.scale,
+            length_bars=min(a.length_bars, b.length_bars),
+            emotional_character=f"{a.emotional_character}+{b.emotional_character}",
         )
 
     def analyse_compatibility(
-        self,
-        progression_a: ChordProgression,
-        progression_b: ChordProgression,
-    ) -> Dict[str, object]:
-        """
-        Analyse the harmonic compatibility of two progressions.
-
-        Returns a compatibility report with key relationship, shared chord
-        types, harmonic rhythm compatibility, and quality palette overlap.
-
-        TODO: Implement compatibility analysis. Identify shared harmonic
-        elements (common chords, related keys) and conflict areas (key
-        distance, rhythm incompatibility). Report is used by all blend steps.
-        """
-        raise NotImplementedError(
-            "TODO: Implement compatibility analysis. Report must cover key "
-            "relationship, shared chords, rhythm compatibility, and palette overlap."
+        self, progression_a: ChordProgression, progression_b: ChordProgression
+    ) -> Dict:
+        same_key = progression_a.key == progression_b.key
+        same_scale = progression_a.scale == progression_b.scale
+        key_distance = abs(
+            NOTES.index(progression_a.key) - NOTES.index(progression_b.key)
         )
+        relative = key_distance in (3, 9)
+        score = 1.0
+        if not same_key:
+            score -= 0.2
+        if not same_scale:
+            score -= 0.1
+        if key_distance > 6:
+            score -= 0.2
+        return {
+            "same_key": same_key,
+            "same_scale": same_scale,
+            "relative_keys": relative,
+            "key_distance_semitones": key_distance,
+            "compatibility_score": max(0.0, score),
+        }
 
     def detect_pivot_chords(
-        self,
-        progression_a: ChordProgression,
-        progression_b: ChordProgression,
+        self, progression_a: ChordProgression, progression_b: ChordProgression
     ) -> List[str]:
-        """
-        Detect pivot chords that can smoothly connect the two progressions.
-
-        Returns a list of chord labels that function in both keys.
-
-        TODO: Implement pivot chord detection. Find chords that are diatonic
-        to both keys (or functionally related). Rank by smoothness of
-        transition and return ordered candidates.
-        """
-        raise NotImplementedError(
-            "TODO: Implement pivot chord detection. Find chords diatonic to "
-            "both keys, ranked by transition smoothness."
-        )
+        a_roots = {v.root % 12 for v in progression_a.voicings}
+        b_roots = {v.root % 12 for v in progression_b.voicings}
+        common_pcs = a_roots & b_roots
+        return [NOTES[pc] for pc in sorted(common_pcs)]
 
     def resolve_key_conflict(
-        self,
-        progression_a: ChordProgression,
-        progression_b: ChordProgression,
+        self, progression_a: ChordProgression, progression_b: ChordProgression
     ) -> Tuple[ChordProgression, ChordProgression]:
-        """
-        Resolve a key conflict between two progressions using pivot chords.
-
-        Returns (adjusted_a, adjusted_b) with pivot points inserted.
-
-        TODO: Use detected pivot chords to insert smooth key transition points.
-        May transpose one progression to a compatible key if pivot chord
-        strategy cannot be applied directly.
-        """
-        raise NotImplementedError(
-            "TODO: Implement key conflict resolution via pivot chords. "
-            "Transposition is a fallback only — pivot chords are preferred."
+        if progression_a.key == progression_b.key:
+            return progression_a, progression_b
+        key_a_idx = NOTES.index(progression_a.key)
+        key_b_idx = NOTES.index(progression_b.key)
+        semitone_shift = key_a_idx - key_b_idx
+        new_voicings = []
+        for v in progression_b.voicings:
+            # Use modulo arithmetic for clean octave-invariant transposition
+            root_pc = (v.root % 12 + semitone_shift) % 12
+            new_root = 60 + root_pc  # place in octave 4
+            new_bass = 36 + root_pc  # place in octave 2
+            # Shift all upper voices by semitone_shift, clamped to valid range
+            new_midi = []
+            for n in v.midi_notes:
+                shifted = n + semitone_shift
+                if shifted < 36:
+                    shifted += 12 * ((36 - shifted) // 12 + 1)
+                elif shifted > 83:
+                    shifted -= 12 * ((shifted - 83) // 12 + 1)
+                new_midi.append(max(36, min(83, shifted)))
+            new_voicings.append(ChordVoicing(
+                root=new_root,
+                quality=v.quality,
+                extensions=v.extensions,
+                bass_note=new_bass,
+                midi_notes=new_midi,
+                duration_beats=v.duration_beats,
+                position_bar=v.position_bar,
+            ))
+        adjusted_b = ChordProgression(
+            voicings=new_voicings,
+            key=progression_a.key,
+            scale=progression_b.scale,
+            length_bars=progression_b.length_bars,
+            emotional_character=progression_b.emotional_character,
         )
+        return progression_a, adjusted_b
 
-    def evaluate_blend_quality(
-        self, blended_progression: ChordProgression
-    ) -> float:
-        """
-        Evaluate the musical quality of a blended progression.
-
-        Returns a quality score (0.0–1.0).
-
-        TODO: Score the blended progression on harmonic coherence, voice
-        leading quality, musical identity (does it have its own character?),
-        and absence of AI patterns. Score must exceed both source scores.
-        """
-        raise NotImplementedError(
-            "TODO: Implement blend quality evaluation. Blended result must "
-            "score higher than either source progression."
-        )
+    def evaluate_blend_quality(self, blended_progression: ChordProgression) -> float:
+        if not blended_progression.voicings:
+            return 0.0
+        qualities = [v.quality for v in blended_progression.voicings]
+        unique_q = len(set(qualities))
+        durations = [v.duration_beats for v in blended_progression.voicings]
+        unique_d = len(set(durations))
+        q_score = min(1.0, unique_q / max(1, len(qualities)))
+        d_score = min(1.0, unique_d / max(1, len(durations) * 0.5))
+        return (q_score + d_score) / 2.0

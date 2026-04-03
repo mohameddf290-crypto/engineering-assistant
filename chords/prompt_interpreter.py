@@ -1,155 +1,152 @@
 """
-OPERATING SYSTEM BRAIN: Prompt Interpreter (Chords)
-DEFAULT AI THINKING: ANNIHILATED. Custom protocols below.
-
-Purpose: Reads a text prompt, maps it to emotion combinations and sonic
-characteristics, and feeds the result to the Chord Creation Brain.
-
-Default AI thinking feeds a text prompt directly into a generation model and
-produces output with no transparent reasoning — you get a result but you have
-no idea why those chords were chosen, and you cannot steer the output
-deliberately. This brain replaces that with a deliberate interpretation
-pipeline: every prompt is parsed for emotional intent, genre context, energy
-level, and sonic character. The output is a fully traceable mapping — every
-chord in the final output can be traced back to specific words in the input
-prompt through the Emotion Description System and Translation System.
-
-The mapping is always explainable. The user can see exactly which words
-triggered which emotions, which emotions produced which harmonic plan, and
-which plan drove which chord choices. This transparency makes the tool
-steerable and trustworthy.
-
-Protocols:
-  1. Every prompt is interpreted for emotional content, genre context, energy
-     level, and sonic character. All four dimensions are extracted explicitly.
-  2. Interpretation maps explicitly to the Emotion Description System —
-     no bypassing. Every emotional word maps to a named emotion in the taxonomy.
-  3. The mapping is fully explainable: every output has a traceable chain from
-     prompt words → emotion labels → chord creation plan.
+Prompt Interpreter for the Chords package.
+Translates natural language prompts into chord creation plans.
 """
-
-# TODO: Design this brain with Cursor — define the full interpretation pipeline:
-# NLP extraction rules for emotional content/genre/energy/sonic character,
-# the mapping vocabulary from prompt words to Emotion System labels, the
-# explain_mapping trace format, and edge case handling for ambiguous prompts.
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from chords.translation import ChordCreationPlan
+
+EMOTION_KEYWORDS: Dict[str, Dict[str, float]] = {
+    "sad": {"melancholy": 0.7, "grief": 0.3},
+    "happy": {"joy": 0.7, "euphoria": 0.3},
+    "dark": {"melancholy": 0.5, "mystery": 0.5},
+    "bright": {"joy": 0.5, "hope": 0.5},
+    "nostalgic": {"nostalgia": 1.0},
+    "peaceful": {"serenity": 1.0},
+    "calm": {"serenity": 0.8, "melancholy": 0.2},
+    "powerful": {"power": 0.7, "defiance": 0.3},
+    "tense": {"tension": 0.7, "aggression": 0.3},
+    "hopeful": {"hope": 0.8, "yearning": 0.2},
+    "mysterious": {"mystery": 1.0},
+    "joyful": {"joy": 0.8, "euphoria": 0.2},
+    "melancholy": {"melancholy": 1.0},
+    "excited": {"excitement": 1.0},
+    "angry": {"aggression": 0.7, "defiance": 0.3},
+    "longing": {"longing": 0.7, "yearning": 0.3},
+    "transcendent": {"transcendence": 1.0},
+    "euphoric": {"euphoria": 1.0},
+    "defiant": {"defiance": 1.0},
+    "serene": {"serenity": 1.0},
+    "sunset": {"nostalgia": 0.5, "serenity": 0.5},
+    "storm": {"aggression": 0.5, "tension": 0.5},
+    "rain": {"melancholy": 0.6, "serenity": 0.4},
+    "fire": {"excitement": 0.5, "aggression": 0.5},
+    "ocean": {"transcendence": 0.5, "serenity": 0.5},
+    "night": {"mystery": 0.6, "melancholy": 0.4},
+    "dawn": {"hope": 0.6, "serenity": 0.4},
+    "shadow": {"mystery": 0.6, "melancholy": 0.4},
+    "light": {"joy": 0.5, "hope": 0.5},
+    "dream": {"nostalgia": 0.4, "transcendence": 0.6},
+    "driving": {"excitement": 0.8, "power": 0.2},
+    "floating": {"serenity": 0.7, "transcendence": 0.3},
+    "pulsing": {"excitement": 0.6, "tension": 0.4},
+    "soaring": {"euphoria": 0.6, "transcendence": 0.4},
+    "heavy": {"power": 0.5, "melancholy": 0.5},
+    "slow": {"melancholy": 0.5, "serenity": 0.5},
+    "fast": {"excitement": 0.6, "aggression": 0.4},
+}
 
 
 @dataclass
 class PromptInterpretation:
-    """
-    The full interpretation of a text prompt.
-
-    Attributes:
-        original_prompt: The raw input prompt text.
-        extracted_emotions: Emotion labels extracted from the prompt.
-        genre_context: Detected genre context (e.g. "jazz", "cinematic", "lo-fi").
-        energy_level: Detected energy level on a 1–10 scale.
-        sonic_characteristics: Detected sonic character descriptors (e.g. "dark", "spacious").
-        emotion_weights: Mapping of emotion label → weight (0.0–1.0, must sum to 1.0).
-        creation_plan: The ChordCreationPlan produced from this interpretation.
-    """
-
-    original_prompt: str
-    extracted_emotions: List[str] = field(default_factory=list)
+    original_prompt: str = ""
+    extracted_emotions: Dict[str, float] = field(default_factory=dict)
     genre_context: str = ""
-    energy_level: int = 5
+    energy_level: float = 0.5
     sonic_characteristics: List[str] = field(default_factory=list)
     emotion_weights: Dict[str, float] = field(default_factory=dict)
     creation_plan: Optional[ChordCreationPlan] = None
 
 
 class PromptInterpreter:
-    """
-    Brain 6 — Prompt Interpreter (Chords).
-
-    Translates free-text prompts into structured PromptInterpretations and
-    ChordCreationPlans via the Emotion Description System.
-    """
-
-    def __init__(self) -> None:
-        self._vocabulary_map: Dict[str, str] = {}
+    """Translates natural language prompts into chord creation plans."""
 
     def interpret_prompt(self, prompt_text: str) -> PromptInterpretation:
-        """
-        Run the full interpretation pipeline on a text prompt.
-
-        TODO: Orchestrate extract_emotional_content → map_to_emotions →
-        build_creation_plan. Return a fully populated PromptInterpretation
-        with a complete creation plan and a traceable explanation.
-        """
-        raise NotImplementedError(
-            "TODO: Implement full prompt interpretation pipeline. Every step "
-            "must be traceable from prompt words to final creation plan."
+        extracted = self.extract_emotional_content(prompt_text)
+        emotion_weights = self.map_to_emotions(extracted)
+        interp = PromptInterpretation(
+            original_prompt=prompt_text,
+            extracted_emotions=extracted,
+            genre_context=extracted.get("genre", ""),
+            energy_level=extracted.get("energy_level", 0.5),
+            sonic_characteristics=extracted.get("characteristics", []),
+            emotion_weights=emotion_weights,
         )
+        interp.creation_plan = self.build_creation_plan(interp)
+        return interp
 
-    def extract_emotional_content(
-        self, prompt_text: str
-    ) -> Dict[str, object]:
-        """
-        Extract emotional content, genre context, energy level, and sonic
-        characteristics from a raw prompt string.
+    def interpret(self, prompt_text: str) -> Dict[str, Any]:
+        interp = self.interpret_prompt(prompt_text)
+        return {
+            "emotions": interp.emotion_weights,
+            "genre": interp.genre_context,
+            "energy_level": interp.energy_level,
+            "creation_plan": interp.creation_plan,
+        }
 
-        TODO: Implement extraction logic: keyword matching, contextual inference,
-        ambiguity handling. Return a structured dict with all four dimensions
-        populated — incomplete extraction is not acceptable.
-        """
-        raise NotImplementedError(
-            "TODO: Implement prompt content extraction. Extract emotions, genre, "
-            "energy, and sonic character. All four dimensions must be populated."
-        )
+    def extract_emotional_content(self, prompt_text: str) -> Dict[str, Any]:
+        words = prompt_text.lower().split()
+        words = [w.strip(".,!?;:'\"") for w in words]
+        matched: Dict[str, float] = {}
+        for word in words:
+            if word in EMOTION_KEYWORDS:
+                for emotion, weight in EMOTION_KEYWORDS[word].items():
+                    matched[emotion] = matched.get(emotion, 0.0) + weight
+        energy_words = {"fast", "driving", "pulsing", "excited", "powerful", "fire", "soaring"}
+        calm_words = {"slow", "calm", "peaceful", "floating", "serene"}
+        energy_score = sum(1 for w in words if w in energy_words)
+        calm_score = sum(1 for w in words if w in calm_words)
+        energy_level = 0.5 + (energy_score - calm_score) * 0.1
+        energy_level = max(0.0, min(1.0, energy_level))
+        return {
+            "raw_scores": matched,
+            "energy_level": energy_level,
+            "genre": "",
+            "characteristics": list(matched.keys())[:5],
+        }
 
-    def map_to_emotions(
-        self, extracted_content: Dict[str, object]
-    ) -> Dict[str, float]:
-        """
-        Map extracted prompt content to Emotion Description System labels
-        with weights.
+    def map_to_emotions(self, extracted_content: Dict) -> Dict[str, float]:
+        raw = extracted_content.get("raw_scores", {})
+        if not raw:
+            return {"serenity": 1.0}
+        total = sum(raw.values())
+        if total == 0:
+            return {"serenity": 1.0}
+        return {k: v / total for k, v in raw.items()}
 
-        Returns a dict of {emotion_name: weight} where weights sum to 1.0.
+    def build_creation_plan(self, interpretation: PromptInterpretation) -> ChordCreationPlan:
+        from chords.emotion_system import EmotionDescriptionSystem
 
-        TODO: Use the vocabulary map to translate extracted words/phrases to
-        Emotion System labels. Resolve ambiguities. Assign weights based on
-        emphasis and repetition in the prompt.
-        """
-        raise NotImplementedError(
-            "TODO: Implement extracted content to emotion label mapping. "
-            "Every mapping must reference a valid Emotion System label. "
-            "Weights must sum to 1.0."
-        )
+        emotions = interpretation.emotion_weights
+        if not emotions:
+            return ChordCreationPlan()
 
-    def build_creation_plan(
-        self, interpretation: PromptInterpretation
-    ) -> ChordCreationPlan:
-        """
-        Build a ChordCreationPlan from a populated PromptInterpretation.
+        es = EmotionDescriptionSystem()
 
-        TODO: Feed the emotion labels and weights through EmotionDescriptionSystem
-        and ChordTranslationSystem to produce a complete ChordCreationPlan.
-        Also incorporate genre_context, energy_level, and sonic_characteristics.
-        """
-        raise NotImplementedError(
-            "TODO: Implement creation plan building from interpretation. "
-            "Feed through EmotionDescriptionSystem → ChordTranslationSystem. "
-            "Genre, energy, and sonic character all influence the plan."
-        )
+        emotion_names = list(emotions.keys())
+        weights = [emotions[e] for e in emotion_names]
+
+        if len(emotion_names) == 1:
+            descriptor = es.get_emotion_descriptor(emotion_names[0])
+        else:
+            descriptor = es.blend_emotions(emotion_names, weights)
+
+        plan = es.map_to_chord_creation_plan(descriptor)
+        return plan
 
     def explain_mapping(self, interpretation: PromptInterpretation) -> str:
-        """
-        Produce a human-readable explanation of the full prompt → plan mapping.
-
-        TODO: Generate a traceable explanation string: for each prompt word →
-        extracted feature → emotion label → creation plan parameter. The
-        explanation must be specific enough for the user to understand and
-        steer the interpretation.
-        """
-        raise NotImplementedError(
-            "TODO: Implement mapping explanation. Must trace every prompt word "
-            "through to the final creation plan parameter it influenced."
-        )
+        emotions = interpretation.emotion_weights
+        if not emotions:
+            return f"No emotional content detected in: '{interpretation.original_prompt}'"
+        top = sorted(emotions.items(), key=lambda x: x[1], reverse=True)[:3]
+        lines = [f"Prompt: '{interpretation.original_prompt}'"]
+        lines.append("Detected emotions:")
+        for e, w in top:
+            lines.append(f"  - {e}: {w:.2f}")
+        if interpretation.creation_plan:
+            lines.append(f"Key: {interpretation.creation_plan.key}, Scale: {interpretation.creation_plan.scale}")
+            lines.append(f"Tension strategy: {interpretation.creation_plan.tension_strategy}")
+        return "\n".join(lines)

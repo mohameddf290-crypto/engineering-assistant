@@ -1,143 +1,201 @@
 """
-Piano Roll-Style Editor Logic (Chords)
-
-UI-logic module for the in-app piano roll-style chord progression editor.
-Handles per-chord duration editing, note position adjustments, playback
-position tracking, and editor state management.
-
-This is not a generation brain — it is a stateful UI layer. It does not make
-musical decisions; it manages the editor state and exposes operations that the
-UI layer can call directly.
+Chord Editor for the Chords package.
+Provides editing operations for chord progressions.
 """
-
-# TODO: Design this editor with Cursor — define the full state management
-# model, the MIDI export format, undo/redo stack requirements, and how editor
-# state syncs back to the ChordProgression data model.
-
 from __future__ import annotations
 
+import copy
+import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from chords.chord_creator import ChordProgression
+from chords.chord_creator import ChordProgression, ChordVoicing
 
 
 @dataclass
 class ChordEditorState:
-    """
-    The current state of the chord progression editor.
-
-    Attributes:
-        progression: The ChordProgression currently loaded in the editor.
-        selected_chord_index: Index of the currently selected chord (None if none selected).
-        playback_position: Current playback position in beats.
-        zoom_level: Current horizontal zoom level (1.0 = default).
-        is_playing: Whether playback is currently active.
-    """
-
     progression: Optional[ChordProgression] = None
     selected_chord_index: Optional[int] = None
     playback_position: float = 0.0
     zoom_level: float = 1.0
     is_playing: bool = False
+    history: List[ChordProgression] = field(default_factory=list)
+    future: List[ChordProgression] = field(default_factory=list)
+
+
+def _encode_vlq(value: int) -> bytes:
+    if value < 128:
+        return bytes([value])
+    result = []
+    result.append(value & 0x7F)
+    value >>= 7
+    while value:
+        result.append((value & 0x7F) | 0x80)
+        value >>= 7
+    return bytes(reversed(result))
 
 
 class ChordEditor:
-    """
-    Piano Roll-Style Editor — Chords.
-
-    Manages the in-app piano roll editor for chord progression editing.
-    Exposes operations for chord selection, duration editing, repositioning,
-    transposition, and MIDI export.
-    """
+    """Provides editing operations for chord progressions with undo/redo support."""
 
     def __init__(self) -> None:
-        self._state: ChordEditorState = ChordEditorState()
+        self._state = ChordEditorState()
+
+    def add_chord(
+        self, state: ChordEditorState, chord_voicing: ChordVoicing, position: int = -1
+    ) -> ChordEditorState:
+        new_history = list(state.history) + ([state.progression] if state.progression else [])
+        prog = copy.deepcopy(state.progression) if state.progression else ChordProgression()
+        voicings = list(prog.voicings)
+        if position < 0 or position >= len(voicings):
+            voicings.append(chord_voicing)
+        else:
+            voicings.insert(position, chord_voicing)
+        prog.voicings = voicings
+        return ChordEditorState(
+            progression=prog,
+            selected_chord_index=state.selected_chord_index,
+            playback_position=state.playback_position,
+            zoom_level=state.zoom_level,
+            is_playing=state.is_playing,
+            history=new_history,
+            future=[],
+        )
+
+    def remove_chord(self, state: ChordEditorState, index: int) -> ChordEditorState:
+        if state.progression is None:
+            return state
+        new_history = list(state.history) + [state.progression]
+        prog = copy.deepcopy(state.progression)
+        voicings = list(prog.voicings)
+        if 0 <= index < len(voicings):
+            voicings.pop(index)
+        prog.voicings = voicings
+        return ChordEditorState(
+            progression=prog,
+            selected_chord_index=None,
+            playback_position=state.playback_position,
+            zoom_level=state.zoom_level,
+            is_playing=state.is_playing,
+            history=new_history,
+            future=[],
+        )
+
+    def update_chord_duration(
+        self, state: ChordEditorState, index: int, duration: float
+    ) -> ChordEditorState:
+        if state.progression is None:
+            return state
+        new_history = list(state.history) + [state.progression]
+        prog = copy.deepcopy(state.progression)
+        if 0 <= index < len(prog.voicings):
+            prog.voicings[index].duration_beats = duration
+        return ChordEditorState(
+            progression=prog,
+            selected_chord_index=state.selected_chord_index,
+            playback_position=state.playback_position,
+            zoom_level=state.zoom_level,
+            is_playing=state.is_playing,
+            history=new_history,
+            future=[],
+        )
+
+    def undo(self, state: ChordEditorState) -> ChordEditorState:
+        if not state.history:
+            return state
+        new_history = list(state.history)
+        previous_progression = new_history.pop()
+        new_future = ([state.progression] if state.progression else []) + list(state.future)
+        return ChordEditorState(
+            progression=previous_progression,
+            selected_chord_index=state.selected_chord_index,
+            playback_position=state.playback_position,
+            zoom_level=state.zoom_level,
+            is_playing=state.is_playing,
+            history=new_history,
+            future=new_future,
+        )
+
+    def redo(self, state: ChordEditorState) -> ChordEditorState:
+        if not state.future:
+            return state
+        new_future = list(state.future)
+        next_progression = new_future.pop(0)
+        new_history = list(state.history) + ([state.progression] if state.progression else [])
+        return ChordEditorState(
+            progression=next_progression,
+            selected_chord_index=state.selected_chord_index,
+            playback_position=state.playback_position,
+            zoom_level=state.zoom_level,
+            is_playing=state.is_playing,
+            history=new_history,
+            future=new_future,
+        )
 
     def load_progression(self, progression: ChordProgression) -> None:
-        """
-        Load a chord progression into the editor.
-
-        TODO: Populate self._state.progression, reset playback position,
-        clear selection, and initialise any internal layout data structures
-        required for the piano roll display.
-        """
-        raise NotImplementedError(
-            "TODO: Implement progression loading. Reset editor state and "
-            "prepare all display data structures."
-        )
+        if self._state.progression is not None:
+            self._state.history.append(self._state.progression)
+        self._state.progression = copy.deepcopy(progression)
+        self._state.future = []
 
     def select_chord(self, index: int) -> None:
-        """
-        Select a chord by its index in the current progression.
+        self._state.selected_chord_index = index
 
-        TODO: Validate index against the current progression length, update
-        self._state.selected_chord_index, and notify any registered listeners.
-        """
-        raise NotImplementedError(
-            "TODO: Implement chord selection. Validate index and update state."
-        )
-
-    def adjust_chord_duration(self, index: int, new_duration_beats: float) -> None:
-        """
-        Adjust the duration of a specific chord.
-
-        TODO: Validate new_duration_beats (must be positive), update the
-        ChordVoicing at the given index, and recompute the positions of all
-        subsequent chords to maintain a gapless timeline.
-        """
-        raise NotImplementedError(
-            "TODO: Implement chord duration adjustment. Recompute all "
-            "subsequent chord positions after any duration change."
-        )
+    def adjust_chord_duration(self, index: int, new_duration: float) -> None:
+        if self._state.progression and 0 <= index < len(self._state.progression.voicings):
+            if self._state.progression is not None:
+                self._state.history.append(copy.deepcopy(self._state.progression))
+            self._state.progression.voicings[index].duration_beats = new_duration
 
     def move_chord(self, from_index: int, to_index: int) -> None:
-        """
-        Move a chord from one position to another in the progression.
-
-        TODO: Validate both indices, swap/insert the ChordVoicing at the
-        new position, and recompute bar/beat positions for the affected range.
-        """
-        raise NotImplementedError(
-            "TODO: Implement chord reordering. Recompute positions for all "
-            "chords in the affected range after the move."
-        )
+        if self._state.progression is None:
+            return
+        voicings = list(self._state.progression.voicings)
+        if 0 <= from_index < len(voicings) and 0 <= to_index < len(voicings):
+            self._state.history.append(copy.deepcopy(self._state.progression))
+            chord = voicings.pop(from_index)
+            voicings.insert(to_index, chord)
+            self._state.progression.voicings = voicings
 
     def transpose_chord(self, index: int, semitones: int) -> None:
-        """
-        Transpose a single chord by a number of semitones.
-
-        TODO: Shift the root, bass_note, and all midi_notes in the ChordVoicing
-        at the given index by the specified semitone offset. Validate that
-        all resulting MIDI note numbers remain in the valid range (0–127).
-        """
-        raise NotImplementedError(
-            "TODO: Implement single-chord transposition. Shift root, bass, "
-            "and all MIDI notes. Validate MIDI range (0–127)."
-        )
+        if self._state.progression is None:
+            return
+        if 0 <= index < len(self._state.progression.voicings):
+            self._state.history.append(copy.deepcopy(self._state.progression))
+            v = self._state.progression.voicings[index]
+            v.root = v.root + semitones
+            v.bass_note = max(36, min(47, v.bass_note + semitones))
+            v.midi_notes = [max(21, min(108, n + semitones)) for n in v.midi_notes]
 
     def export_to_midi(self, output_path: str) -> Path:
-        """
-        Export the current progression to a MIDI file.
-
-        Returns the Path of the exported file.
-
-        TODO: Convert all ChordVoicings to MIDI events with correct note
-        on/off timing. Write a valid Type 1 MIDI file to output_path.
-        """
-        raise NotImplementedError(
-            "TODO: Implement MIDI export. Convert all voicings to note events "
-            "with correct timing and write a valid MIDI file."
-        )
+        tempo = 500000  # 120 BPM
+        ticks_per_beat = 480
+        events = []
+        tick = 0
+        if self._state.progression:
+            for v in self._state.progression.voicings:
+                duration_ticks = int(v.duration_beats * ticks_per_beat)
+                for note in v.midi_notes:
+                    events.append((tick, 0x90, note, 100))
+                    events.append((tick + duration_ticks, 0x80, note, 0))
+                tick += duration_ticks
+        events.sort(key=lambda e: (e[0], e[1]))
+        track_data = bytearray()
+        track_data += b'\x00\xff\x51\x03'
+        track_data += struct.pack('>I', tempo)[1:]
+        prev_tick = 0
+        for tick, status, note, vel in events:
+            delta = tick - prev_tick
+            track_data += _encode_vlq(delta)
+            track_data += bytes([status, note, vel])
+            prev_tick = tick
+        track_data += b'\x00\xff\x2f\x00'
+        header = b'MThd' + struct.pack('>IHHH', 6, 0, 1, ticks_per_beat)
+        track = b'MTrk' + struct.pack('>I', len(track_data)) + bytes(track_data)
+        path = Path(output_path)
+        path.write_bytes(header + track)
+        return path
 
     def get_editor_state(self) -> ChordEditorState:
-        """
-        Return the current editor state.
-
-        TODO: Return a copy of self._state to prevent external mutation of
-        the internal state object.
-        """
-        raise NotImplementedError(
-            "TODO: Implement state retrieval. Return a copy, not a reference."
-        )
+        return copy.deepcopy(self._state)
